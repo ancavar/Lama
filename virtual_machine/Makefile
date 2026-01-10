@@ -1,8 +1,8 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -O2
 TARGET = interpreter.exe
-SOURCES = interpreter.c bytecode.c stack.c call_stack.c opcodes.c
-HEADERS = opcodes.h bytecode.h stack.h call_stack.h
+SOURCES = interpreter.c bytecode.c stack.c call_stack.c opcodes.c verifier.c
+HEADERS = opcodes.h bytecode.h stack.h call_stack.h verifier.h
 OBJECTS = $(SOURCES:.c=.o)
 
 RUNTIME_DIR = ../runtime
@@ -32,3 +32,4 @@ bytecode.o: bytecode.c bytecode.h
 stack.o: stack.c stack.h
 call_stack.o: call_stack.c call_stack.h
 opcodes.o: opcodes.c opcodes.h
+verifier.o: verifier.c verifier.h
