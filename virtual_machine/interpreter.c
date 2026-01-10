@@ -50,9 +50,6 @@
 
 static aint pending_closure = 0;
 
-void *__start_custom_data;
-void *__stop_custom_data;
-
 extern void __init(void);
 
 extern aint Lread(void);
