@@ -1,6 +1,7 @@
 #include "verifier.h"
 #include "bytecode.h"
 #include "opcodes.h"
+#include "util.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -173,20 +174,27 @@ static int decode_instr(const uint8_t *code, int ip, int code_size,
 }
 
 /**
+ * Dynamic array for decoded instructions
+ */
+typedef struct {
+  decoded_instr_t *data;
+  size_t len;
+  size_t cap;
+} decoded_instrs_da;
+
+/**
  * Insturciton map for checking valid jump boundaries
  */
 typedef struct {
-  decoded_instr_t *instrs; // array of decoded instructions
+  decoded_instrs_da instrs;
   int *ip_to_index; // map from ip to instruction index (-1 if not a boundary)
-  int len;
-  int cap;
   int code_size;
 } instr_map_t;
 
 static void instr_map_destroy(instr_map_t *map) {
   if (!map)
     return;
-  free(map->instrs);
+  da_free(map->instrs);
   free(map->ip_to_index);
   free(map);
 }
@@ -197,13 +205,11 @@ static instr_map_t *instr_map_create(int code_size) {
     return NULL;
 
   map->code_size = code_size;
-  map->cap = code_size / 2 + 1;
-  map->len = 0;
+  da_init(map->instrs);
 
-  map->instrs = malloc(map->cap * sizeof(decoded_instr_t));
   map->ip_to_index = malloc(map->code_size * sizeof(int));
 
-  if (!map->instrs || !map->ip_to_index) {
+  if (!map->ip_to_index) {
     instr_map_destroy(map);
     return NULL;
   }
@@ -216,18 +222,9 @@ static instr_map_t *instr_map_create(int code_size) {
 static int instr_map_add(instr_map_t *map, const decoded_instr_t *instr) {
   int ip = instr->ip;
 
-  if (map->len >= map->cap) {
-    int new_cap = map->cap + 2;
-    decoded_instr_t *new_instrs =
-        realloc(map->instrs, new_cap * sizeof(decoded_instr_t));
-    if (!new_instrs)
-      return -1;
-    map->instrs = new_instrs;
-    map->cap = new_cap;
-  }
+  da_append(map->instrs, *instr);
 
-  int idx = map->len++;
-  map->instrs[idx] = *instr;
+  int idx = map->instrs.len - 1;
   map->ip_to_index[ip] = idx;
 
   return idx;
@@ -277,8 +274,8 @@ static instr_map_t *decode_all_instructions(bytecode *bc) {
  * Validate jump targets
  */
 static bool validate_jump_targets(instr_map_t *map) {
-  for (int i = 0; i < map->len; i++) {
-    decoded_instr_t *instr = &map->instrs[i];
+  for (size_t i = 0; i < map->instrs.len; i++) {
+    decoded_instr_t *instr = &map->instrs.data[i];
     if (instr->jump_target >= 0) {
       if (!is_valid_instr_boundary(map, instr->jump_target)) {
         VERIFY_ERROR(instr->ip,

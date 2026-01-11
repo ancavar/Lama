@@ -10,6 +10,7 @@
 #include "call_stack.h"
 #include "opcodes.h"
 #include "stack.h"
+#include "verifier.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -645,6 +646,11 @@ int main(int argc, char *argv[]) {
 
   bytecode *bc = load_bytecode(argv[1]);
   if (!bc) {
+    return 1;
+  }
+
+  if (!verify_bytecode(bc)) {
+    free_bytecode(bc);
     return 1;
   }
 
