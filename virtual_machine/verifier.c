@@ -174,19 +174,15 @@ static int decode_instr(const uint8_t *code, int ip, int code_size,
 }
 
 /**
- * Dynamic array for decoded instructions
- */
-typedef struct {
-  decoded_instr_t *data;
-  size_t len;
-  size_t cap;
-} decoded_instrs_da;
-
-/**
  * Insturciton map for checking valid jump boundaries
  */
 typedef struct {
-  decoded_instrs_da instrs;
+  // Dynamic array of decoded instructions
+  struct {
+    decoded_instr_t *data;
+    size_t len;
+    size_t cap;
+  } instrs;
   int *ip_to_index; // map from ip to instruction index (-1 if not a boundary)
   int code_size;
 } instr_map_t;

@@ -1,7 +1,8 @@
 #ifndef UTIL_H
 #define UTIL_H
-#include <stdlib.h>
-
+/*
+ * Dynamic array macros
+ */
 // TODO: exit(1) might be too harsh
 #define da_append(xs, x)                                                       \
   do {                                                                         \
@@ -30,5 +31,9 @@
     xs.len = 0;                                                                \
     xs.cap = 0;                                                                \
   } while (0)
+
+char *strndup(const char *str, int chars);
+char *strdup(const char *src);
+char *extract_module_name(const char *filename);
 
 #endif

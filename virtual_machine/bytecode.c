@@ -5,7 +5,9 @@
  */
 
 #include "bytecode.h"
+#include "util.h"
 #include <fcntl.h>
+#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,8 +20,9 @@ int read_i32(const uint8_t data[], int offset) {
          (data[offset + 3] << 24);
 }
 
-#define HEADER_SIZE 12
+#define HEADER_SIZE 16
 #define PUB_ENTRY_SIZE 8
+#define IMPORT_ENTRY_SIZE 4
 
 static int find_entry_point(const uint8_t *data, int pubs_offset, int num_pubs,
                             const uint8_t *string_table, const char *name) {
@@ -63,9 +66,11 @@ bytecode *load_bytecode(const char *filename) {
   int st_size = read_i32(data, 0);
   int globals_count = read_i32(data, 4);
   int num_pubs = read_i32(data, 8);
+  int num_imports = read_i32(data, 12);
 
   int pubs_offset = HEADER_SIZE;
-  int st_offset = pubs_offset + num_pubs * PUB_ENTRY_SIZE;
+  int imports_offset = pubs_offset + num_pubs * PUB_ENTRY_SIZE;
+  int st_offset = imports_offset + num_imports * IMPORT_ENTRY_SIZE;
   int code_offset = st_offset + st_size;
   int code_size = size - code_offset;
 
@@ -84,16 +89,29 @@ bytecode *load_bytecode(const char *filename) {
   bc->entry_point = main_entry_point;
   bc->globals_count = globals_count;
   bc->public_symbols_count = num_pubs;
-  bc->public_symbols = malloc(num_pubs * sizeof(int));
+  bc->string_table = (const char *)string_table;
+  bc->string_table_size = st_size;
+
+  // Store public symbol offsets (both name and code offsets)
+  bc->public_symbols = malloc(num_pubs * 2 * sizeof(int));
   for (int i = 0; i < num_pubs; i++) {
     int entry_offset = pubs_offset + i * PUB_ENTRY_SIZE;
-    bc->public_symbols[i] = read_i32(data, entry_offset + 4);
+    bc->public_symbols[i * 2] = read_i32(data, entry_offset); // name offset
+    bc->public_symbols[i * 2 + 1] =
+        read_i32(data, entry_offset + 4); // code offset
   }
 
-  bc->string_table = (const char *)string_table;
+  // Parse imports
+  bc->import_count = num_imports;
+  bc->imports = malloc(num_imports * sizeof(char *));
+  for (int i = 0; i < num_imports; i++) {
+    int name_offset = read_i32(data, imports_offset + i * IMPORT_ENTRY_SIZE);
+    bc->imports[i] = strdup((char *)(string_table + name_offset));
+  }
 
   bc->map_base = map;
   bc->map_size = size;
+  bc->module_name = extract_module_name(filename);
 
   return bc;
 }
@@ -103,7 +121,14 @@ void free_bytecode(bytecode *bc) {
     if (bc->map_base) {
       munmap(bc->map_base, bc->map_size);
     }
+    if (bc->imports) {
+      for (int i = 0; i < bc->import_count; i++) {
+        free(bc->imports[i]);
+      }
+      free(bc->imports);
+    }
     free(bc->public_symbols);
+    free(bc->module_name);
     free(bc);
   }
 }

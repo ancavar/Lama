@@ -8,6 +8,7 @@
 #include "../runtime/runtime_common.h"
 #include "bytecode.h"
 #include "call_stack.h"
+#include "module_manager.h"
 #include "opcodes.h"
 #include "stack.h"
 #include "verifier.h"
@@ -635,6 +636,16 @@ end:
   return;
 }
 
+// TODO: this needs to go for a proper implementation
+void run_modules(module_list *modules) {
+  for (size_t i = 0; i < modules->modules.len; i++) {
+    module *mod = modules->modules.data[i];
+    if (mod && mod->bc && mod->bc->entry_point >= 0) {
+      run(mod->bc);
+    }
+  }
+}
+
 /**
  * Entry point for the VM. Loads bytecode from a file and starts execution.
  */
@@ -644,18 +655,14 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  bytecode *bc = load_bytecode(argv[1]);
-  if (!bc) {
+  module_list *modules = load_modules(argv[1], NULL);
+  if (!modules) {
+    fprintf(stderr, "Failed to load modules from '%s'\n", argv[1]);
     return 1;
   }
 
-  if (!verify_bytecode(bc)) {
-    free_bytecode(bc);
-    return 1;
-  }
+  run_modules(modules);
 
-  run(bc);
-
-  free_bytecode(bc);
+  free_modules(modules);
   return 0;
 }

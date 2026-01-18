@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -O2
 DEPFLAGS = -MMD
 TARGET = interpreter.exe
-SOURCES = interpreter.c bytecode.c stack.c call_stack.c opcodes.c verifier.c
+SOURCES = interpreter.c bytecode.c stack.c call_stack.c opcodes.c verifier.c module_manager.c util.c
 OBJECTS = $(SOURCES:.c=.o)
 
 RUNTIME_DIR = ../runtime

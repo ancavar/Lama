@@ -353,16 +353,22 @@ module ByteCode = struct
               failwith (Printf.sprintf "ERROR: undefined label '%s'" l) ))
       @@ S.elements !pubs
     in
+    let import_offsets =
+      List.map (fun l -> Int32.of_int @@ StringTab.add st l)
+      @@ S.elements !imports
+    in
     let st = Buffer.to_bytes st.StringTab.buffer in
     let file = Buffer.create 1024 in
     Buffer.add_int32_ne file (Int32.of_int @@ Bytes.length st);
     Buffer.add_int32_ne file (Int32.of_int @@ !glob_count);
     Buffer.add_int32_ne file (Int32.of_int @@ List.length pubs);
+    Buffer.add_int32_ne file (Int32.of_int @@ List.length import_offsets);
     List.iter
       (fun (n, o) ->
         Buffer.add_int32_ne file n;
         Buffer.add_int32_ne file o)
       pubs;
+    List.iter (fun n -> Buffer.add_int32_ne file n) import_offsets;
     Buffer.add_bytes file st;
     Buffer.add_bytes file code;
     let f = open_out_bin (Printf.sprintf "%s.bc" cmd#basename) in
