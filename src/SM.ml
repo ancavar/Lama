@@ -172,15 +172,24 @@ module ByteCode = struct
     let code = Buffer.create 256 in
     let st = StringTab.create () in
     let lmap = Stdlib.ref M.empty in
+    let externs = Stdlib.ref S.empty in
     let pubs = Stdlib.ref S.empty in
     let imports = Stdlib.ref S.empty in
-    let globals = Stdlib.ref M.empty in
-    let glob_count = Stdlib.ref 0 in
+    let globals = Stdlib.ref @@ M.empty in
+    let glob_count = Stdlib.ref 1 in (* 0 is the placeholder for globals externs *)
     let fixups = Stdlib.ref [] in
+    let func_fixups = Stdlib.ref [] in
+    let vars_substs = Stdlib.ref [] in
     let add_lab l = lmap := M.add l (Buffer.length code) !lmap in
+    let add_extern l =
+      if String.starts_with ~prefix:"global_" l
+      then globals := M.add l 0 !globals (* 0 is the placeholder for globals externs *)
+      else externs := S.add l !externs in
     let add_public l = pubs := S.add l !pubs in
     let add_import l = imports := S.add l !imports in
     let add_fixup l = fixups := (Buffer.length code, l) :: !fixups in
+    let add_func_fixup l = func_fixups := (Buffer.length code, l) :: !func_fixups in
+    let add_var_subst l = vars_substs := (Buffer.length code, l) :: !vars_substs in
     let add_bytes = List.iter (fun x -> Buffer.add_char code @@ Char.chr x) in
     let add_ints =
       List.iter (fun x -> Buffer.add_int32_ne code @@ Int32.of_int x)
@@ -193,16 +202,17 @@ module ByteCode = struct
       let b x = match n with None -> x | Some b -> (b * 16) + x in
       List.iter (function
         | Value.Global s ->
+            let s' = "global_" ^ s in
             let i =
-              try M.find s !globals
+              try M.find s' !globals
               with Not_found ->
                 let i = !glob_count in
                 incr glob_count;
-                globals := M.add s i !globals;
+                globals := M.add s' i !globals;
                 i
             in
             add_bytes [ b 0 ];
-            add_ints [ i ]
+            if i == 0 then (add_var_subst s'; add_ints [ 0 ]) else add_ints [ i - 1 ]
         | Value.Local n ->
             add_bytes [ b 1 ];
             add_ints [ n ]
@@ -293,7 +303,7 @@ module ByteCode = struct
       (* 0x54 l:32 n:32 d*:32 *)
       | CLOSURE (s, ds) ->
           add_bytes [ (5 * 16) + 4 ];
-          add_fixup s;
+          add_func_fixup s;
           add_ints [ 0; List.length ds ];
           add_designations None ds
       (* 0x55 n:32            *)
@@ -303,7 +313,7 @@ module ByteCode = struct
       (* 0x56 l:32 n:32       *)
       | CALL (fn, n, _) ->
           add_bytes [ (5 * 16) + 6 ];
-          add_fixup fn;
+          add_func_fixup fn;
           add_ints [ 0; n ]
       (* 0x57 s:32 n:32       *)
       | TAG (s, n) ->
@@ -324,16 +334,29 @@ module ByteCode = struct
           add_ints [ n ]
       (* 0x6p                 *)
       | PATT p -> add_bytes [ (6 * 16) + enum patt p ]
-      | EXTERN _ -> ()
+      | EXTERN s -> add_extern s
+      (* TODO: put externs in string table (?), or check that all external funtions are externs *)
       | PUBLIC s -> add_public s
       | IMPORT s -> add_import s
       | _ ->
           failwith
             (Printf.sprintf "Unexpected pattern: %s: %d" __FILE__ __LINE__)
     in
+    let substs = Stdlib.ref [] in
+    let add_subst c l = substs := (c, l) :: !substs in
     List.iter insn_code insns;
+    substs := !vars_substs;
     add_bytes [ 255 ];
     let code = Buffer.to_bytes code in
+    List.iter
+      (fun (addr_ofs, l) ->
+        Bytes.set_int32_ne code addr_ofs
+          (Int32.of_int
+          @@
+          try M.find l !lmap
+          with Not_found ->
+            add_subst addr_ofs l; 0))
+      !func_fixups;
     List.iter
       (fun (ofs, l) ->
         Bytes.set_int32_ne code ofs
@@ -343,33 +366,47 @@ module ByteCode = struct
           with Not_found ->
             failwith (Printf.sprintf "ERROR: undefined label '%s'" l)))
       !fixups;
-    let pubs =
+        let pubs =
       List.map (fun l ->
           ( Int32.of_int @@ StringTab.add st l,
             Int32.of_int
             @@
-            try M.find l !lmap
+            let is_global = String.starts_with ~prefix:"global_" l in
+            (* 0 was reserved for extern globals *)
+            try (if is_global then Int.max (M.find l !globals - 1) 0 else M.find l !lmap)
             with Not_found ->
-              failwith (Printf.sprintf "ERROR: undefined label '%s'" l) ))
+              failwith (Printf.sprintf "ERROR: undefined label of public '%s'" l) ))
       @@ S.elements !pubs
     in
-    let import_offsets =
+    let imports =
       List.map (fun l -> Int32.of_int @@ StringTab.add st l)
       @@ S.elements !imports
     in
-    let st = Buffer.to_bytes st.StringTab.buffer in
+    let str_table = Buffer.to_bytes st.StringTab.buffer in
+    let subst_table = Buffer.create 1024 in
     let file = Buffer.create 1024 in
-    Buffer.add_int32_ne file (Int32.of_int @@ Bytes.length st);
-    Buffer.add_int32_ne file (Int32.of_int @@ !glob_count);
+    List.iter
+      (fun (c, l) ->
+        Buffer.add_int32_ne subst_table @@ Int32.of_int c;
+        Buffer.add_string subst_table l;
+        Buffer.add_char subst_table (Char.chr 0))
+      !substs;
+    Buffer.add_int32_ne file (Int32.of_int @@ Bytes.length str_table);
+    Buffer.add_int32_ne file (Int32.of_int @@ !glob_count - 1); (* 0 was reserved for extern globals *)
+    Buffer.add_int32_ne file (Int32.of_int @@ Buffer.length subst_table);
+    Buffer.add_int32_ne file (Int32.of_int @@ List.length imports);
     Buffer.add_int32_ne file (Int32.of_int @@ List.length pubs);
-    Buffer.add_int32_ne file (Int32.of_int @@ List.length import_offsets);
+    List.iter
+      (fun (n) ->
+        Buffer.add_int32_ne file n)
+      imports;
     List.iter
       (fun (n, o) ->
         Buffer.add_int32_ne file n;
         Buffer.add_int32_ne file o)
       pubs;
-    List.iter (fun n -> Buffer.add_int32_ne file n) import_offsets;
-    Buffer.add_bytes file st;
+    Buffer.add_bytes file str_table;
+    Buffer.add_bytes file @@ Buffer.to_bytes subst_table;
     Buffer.add_bytes file code;
     let f = open_out_bin (Printf.sprintf "%s.bc" cmd#basename) in
     Buffer.output_buffer f file;

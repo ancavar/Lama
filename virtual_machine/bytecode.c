@@ -15,12 +15,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-int read_i32(const uint8_t data[], int offset) {
-  return data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) |
-         (data[offset + 3] << 24);
-}
 
-#define HEADER_SIZE 16
+#define HEADER_SIZE 20
 #define PUB_ENTRY_SIZE 8
 #define IMPORT_ENTRY_SIZE 4
 
@@ -65,13 +61,15 @@ bytecode *load_bytecode(const char *filename) {
 
   int st_size = read_i32(data, 0);
   int globals_count = read_i32(data, 4);
-  int num_pubs = read_i32(data, 8);
+  int subst_table_size = read_i32(data, 8);
   int num_imports = read_i32(data, 12);
+  int num_pubs = read_i32(data, 16);
 
-  int pubs_offset = HEADER_SIZE;
-  int imports_offset = pubs_offset + num_pubs * PUB_ENTRY_SIZE;
-  int st_offset = imports_offset + num_imports * IMPORT_ENTRY_SIZE;
-  int code_offset = st_offset + st_size;
+  int imports_offset = HEADER_SIZE;
+  int pubs_offset = imports_offset + num_imports * IMPORT_ENTRY_SIZE;
+  int st_offset = pubs_offset + num_pubs * PUB_ENTRY_SIZE;
+  int subst_offset = st_offset + st_size;
+  int code_offset = subst_offset + subst_table_size;
   int code_size = size - code_offset;
 
   uint8_t *string_table = data + st_offset;
@@ -91,6 +89,8 @@ bytecode *load_bytecode(const char *filename) {
   bc->public_symbols_count = num_pubs;
   bc->string_table = (const char *)string_table;
   bc->string_table_size = st_size;
+  bc->subst_table = data + subst_offset;
+  bc->subst_table_size = subst_table_size;
 
   // Store public symbol offsets (both name and code offsets)
   bc->public_symbols = malloc(num_pubs * 2 * sizeof(int));

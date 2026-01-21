@@ -121,7 +121,6 @@ static module *load_module(module_list *list, const char *s,
     free(filepath);
     return NULL;
   }
-  printf("Loading module '%s' from '%s'\n", module_name, filepath);
 
   // Check if this module is already loaded
   module *existing = find_module(list, module_name);

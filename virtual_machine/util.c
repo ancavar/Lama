@@ -32,3 +32,15 @@ char *extract_module_name(const char *filename) {
   free(path_copy);
   return result;
 }
+
+int read_i32(const unsigned char data[], int offset) {
+  return data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) |
+         (data[offset + 3] << 24);
+}
+
+void write_i32(unsigned char *data, int offset, int value) {
+  data[offset] = value & 0xFF;
+  data[offset + 1] = (value >> 8) & 0xFF;
+  data[offset + 2] = (value >> 16) & 0xFF;
+  data[offset + 3] = (value >> 24) & 0xFF;
+}

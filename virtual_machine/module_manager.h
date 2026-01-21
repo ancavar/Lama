@@ -1,6 +1,6 @@
 /*
  * Module loader and linker for Lama VM.
- * WIP.
+ *
  */
 
 #ifndef MODULE_MANAGER_H

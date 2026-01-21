@@ -14,14 +14,6 @@
             ##__VA_ARGS__);                                                    \
   } while (0);
 
-typedef struct {
-  int ip;   // Address of this instruction
-  int size; // Total size of opcode + operands in bytes (useful for jumping to
-            // next ip)
-  uint8_t opcode;  // The opcode byte
-  int jump_target; // Target address for all jumps (-1 if no jump)
-} decoded_instr_t;
-
 static int compute_closure_size(const uint8_t *code, int ip, int code_size) {
   int n_captured = read_i32(code, ip + 5);
   int total_size = 1 + 4 + 4 + n_captured * 5;
@@ -32,8 +24,8 @@ static int compute_closure_size(const uint8_t *code, int ip, int code_size) {
   return total_size;
 }
 
-static int decode_instr(const uint8_t *code, int ip, int code_size,
-                        decoded_instr_t *instr) {
+int decode_instr(const uint8_t *code, int ip, int code_size,
+                 decoded_instr_t *instr) {
   if (ip >= code_size)
     return -1;
 
