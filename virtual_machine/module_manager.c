@@ -181,6 +181,98 @@ static module *load_module(module_list *list, const char *s,
   return mod;
 }
 
+/*
+ * Based on Kahn's algorithm.
+ */
+static bool topological_sort(module_list *list) {
+  int n = list->modules.len;
+
+  int *indegree = calloc(n, sizeof(int));
+  module **result = malloc(n * sizeof(module *));
+  int *queue = malloc(n * sizeof(int));
+
+  if (!indegree || !result || !queue) {
+    goto fail;
+  }
+
+  // Compute indegrees
+  for (int i = 0; i < n; i++) {
+    module *mod = list->modules.data[i];
+
+    for (int j = 0; j < mod->bc->import_count; j++) {
+      const char *import_name = mod->bc->imports[j];
+
+      if (strcmp(import_name, "Std") == 0) {
+        continue;
+      }
+
+      int dep_idx = -1;
+      for (int k = 0; k < n; k++) {
+        if (strcmp(list->modules.data[k]->name, import_name) == 0) {
+          dep_idx = k;
+          break;
+        }
+      }
+
+      if (dep_idx < 0) {
+        fprintf(stderr, "Unknown module '%s' imported by '%s'\n", import_name,
+                mod->name);
+        goto fail;
+      }
+
+      // Edge: dep -> mod
+      indegree[i]++;
+    }
+  }
+
+  int hd = 0;
+  int tl = 0;
+
+  for (int i = 0; i < n; i++) {
+    if (indegree[i] == 0) {
+      queue[tl++] = i;
+    }
+  }
+
+  int result_idx = 0;
+
+  while (hd < tl) {
+    int idx = queue[hd++];
+    module *mod = list->modules.data[idx];
+
+    result[result_idx++] = mod;
+
+    // TODO: might actually need a hashmap after all
+    for (int i = 0; i < n; i++) {
+      module *dep = list->modules.data[i];
+
+      for (int j = 0; j < dep->bc->import_count; j++) {
+        if (strcmp(dep->bc->imports[j], mod->name) == 0) {
+          if (--indegree[i] == 0) {
+            queue[tl++] = i;
+          }
+        }
+      }
+    }
+  }
+
+  if (result_idx != n) {
+    fprintf(stderr, "Circular dependency detected\n");
+    goto fail;
+  }
+  memcpy(list->modules.data, result, n * sizeof(module *));
+  free(indegree);
+  free(queue);
+  free(result);
+  return true;
+
+fail:
+  free(indegree);
+  free(queue);
+  free(result);
+  return false;
+}
+
 module_list *load_modules(const char *module_or_path, const char *search_path) {
   module_list *list = malloc(sizeof(module_list));
   if (!list) {
@@ -192,6 +284,12 @@ module_list *load_modules(const char *module_or_path, const char *search_path) {
 
   module *main_module = load_module(list, module_or_path, search_path);
   if (!main_module) {
+    module_list_free(list);
+    free(list);
+    return NULL;
+  }
+
+  if (!topological_sort(list)) {
     module_list_free(list);
     free(list);
     return NULL;

@@ -26,6 +26,11 @@ typedef struct module_list {
   } modules;
 } module_list;
 
+/*
+ * Load modules given a module name or path, and an optional search path.
+ * Returns a topologically ordered (based on imports) list of loaded modules, or
+ * NULL on failure.
+ */
 module_list *load_modules(const char *module_or_path, const char *search_path);
 void free_modules(module_list *list);
 module *find_module(module_list *list, const char *name);
