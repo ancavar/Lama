@@ -172,9 +172,9 @@ static void relocate_internal_references(uint8_t *code_buffer, int size,
                                          module_relocation *reloc) {
   int ip = 0;
   while (ip < size) {
-    decoded_instr_t *instr = malloc(sizeof(decoded_instr_t));
+    decoded_instr_t instr;
     // TODO: insanely ugly and lazy
-    int instr_size = decode_instr(code_buffer, ip, size, instr);
+    int instr_size = decode_instr(code_buffer, ip, size, &instr);
     if (instr_size < 0)
       break;
 

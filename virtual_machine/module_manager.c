@@ -100,6 +100,9 @@ static module *load_module(module_list *list, const char *s,
   char *filepath = NULL;
   char *module_name = NULL;
   char *derived_search_path = NULL;
+  bytecode *bc = NULL;
+  module *mod = NULL;
+  module *result = NULL;
 
   // Determine if we're loading by path or by name
   if (is_filepath(s)) {
@@ -112,43 +115,35 @@ static module *load_module(module_list *list, const char *s,
 
   if (!filepath) {
     fprintf(stderr, "Failed to build path for '%s'\n", s);
-    free(module_name);
-    return NULL;
+    goto cleanup;
   }
 
   if (!module_name) {
     fprintf(stderr, "Failed to derive module name for '%s'\n", s);
-    free(filepath);
-    return NULL;
+    goto cleanup;
   }
 
   // Check if this module is already loaded
   module *existing = find_module(list, module_name);
   if (existing) {
-    free(filepath);
-    free(module_name);
-    return existing;
+    result = existing;
+    goto cleanup;
   }
 
-  bytecode *bc = load_bytecode(filepath);
+  bc = load_bytecode(filepath);
   if (!bc) {
     fprintf(stderr, "Failed to load bytecode from '%s'\n", filepath);
-    free(filepath);
-    free(module_name);
-    return NULL;
+    goto cleanup;
   }
 
   // Create new module entry
-  module *mod = create_module(list, module_name);
-  free(module_name);
-
+  mod = create_module(list, module_name);
   if (!mod) {
-    free_bytecode(bc);
-    free(filepath);
-    return NULL;
+    goto cleanup;
   }
 
   mod->bc = bc;
+  bc = NULL;
 
   // Determine search path for dependencies
   // TODO: -I
@@ -157,11 +152,10 @@ static module *load_module(module_list *list, const char *s,
   } else {
     derived_search_path = get_directory(filepath);
   }
-  free(filepath);
 
   // Recursively load dependencies
-  for (int i = 0; i < bc->import_count; i++) {
-    const char *import_name = bc->imports[i];
+  for (int i = 0; i < mod->bc->import_count; i++) {
+    const char *import_name = mod->bc->imports[i];
 
     // Skip since we already have it (as runtime.a)
     if (strcmp(import_name, "Std") == 0) {
@@ -172,15 +166,21 @@ static module *load_module(module_list *list, const char *s,
     if (!dep) {
       fprintf(stderr, "Failed to load dependency '%s' for module '%s'\n",
               import_name, mod->name);
-      free(derived_search_path);
-      return NULL;
+      goto cleanup;
     }
   }
 
-  free(derived_search_path);
-  return mod;
-}
+  result = mod;
 
+cleanup:
+  free(filepath);
+  free(module_name);
+  free(derived_search_path);
+  if (bc) {
+    free_bytecode(bc);
+  }
+  return result;
+}
 /*
  * Based on Kahn's algorithm.
  */
