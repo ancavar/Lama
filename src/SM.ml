@@ -382,15 +382,14 @@ module ByteCode = struct
       List.map (fun l -> Int32.of_int @@ StringTab.add st l)
       @@ S.elements !imports
     in
-    let str_table = Buffer.to_bytes st.StringTab.buffer in
     let subst_table = Buffer.create 1024 in
-    let file = Buffer.create 1024 in
     List.iter
       (fun (c, l) ->
         Buffer.add_int32_ne subst_table @@ Int32.of_int c;
-        Buffer.add_string subst_table l;
-        Buffer.add_char subst_table (Char.chr 0))
+        Buffer.add_int32_ne subst_table @@ Int32.of_int (StringTab.add st l))
       !substs;
+    let str_table = Buffer.to_bytes st.StringTab.buffer in
+    let file = Buffer.create 1024 in
     Buffer.add_int32_ne file (Int32.of_int @@ Bytes.length str_table);
     Buffer.add_int32_ne file (Int32.of_int @@ !glob_count - 1); (* 0 was reserved for extern globals *)
     Buffer.add_int32_ne file (Int32.of_int @@ Buffer.length subst_table);

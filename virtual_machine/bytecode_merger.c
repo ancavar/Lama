@@ -230,9 +230,11 @@ static int apply_substitutions(module *mod, uint8_t *merged_code,
   while (pos < end) {
     int offset = read_i32(pos, 0);
     pos += 4;
-    const char *name = (const char *)pos;
-    int name_len = strlen(name);
-    pos += name_len + 1;
+    int string_table_index = read_i32(pos, 0);
+    pos += 4;
+
+    // Get the function's name from the module's string table
+    const char *name = (const char *)(bc->string_table + string_table_index);
 
     symbol_entry *sym = symbol_table_find(symbols, name);
     if (!sym) {
