@@ -14,6 +14,7 @@
 #include "stack.h"
 #include "util.h"
 #include "verifier.h"
+#include "util.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -467,7 +468,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       // push string from string table onto stack
       int str_offset = read_i32(bc->code, ip);
       ip += 4;
-      const char *src = bc->string_table + str_offset;
+  const char *src = read_string(bc, str_offset);
       VM_DEBUG("STRING: \"%s\"\n", src);
       void *str = Bstring((void *)&src);
       stack_push(stack, (aint)str);
@@ -524,7 +525,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       ip += 4;
       int n_fields = read_i32(bc->code, ip);
       ip += 4;
-      const char *tag_str = bc->string_table + tag_offset;
+  const char *tag_str = read_string(bc, tag_offset);
       aint tag_hash = LtagHash((char *)tag_str);
       VM_DEBUG("SEXP: tag=\"%s\" (hash=0x%lx), n_fields=%d\n", tag_str,
                tag_hash, n_fields);
@@ -543,7 +544,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       ip += 4;
       int n_fields = read_i32(bc->code, ip);
       ip += 4;
-      const char *tag_str = bc->string_table + tag_offset;
+  const char *tag_str = read_string(bc, tag_offset);
       aint tag_hash = LtagHash((char *)tag_str);
       aint val = stack_pop(stack);
       VM_DEBUG("TAG: val=0x%lx, tag=\"%s\" (hash=0x%lx), n_fields=%d\n", val,

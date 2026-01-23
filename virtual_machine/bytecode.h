@@ -23,7 +23,6 @@ typedef struct {
                      // /stdlib/Lib.bc);
 } bytecode;
 
-int read_i32(const uint8_t data[], int offset);
 bytecode *load_bytecode(const char *filename);
 void free_bytecode(bytecode *bc);
 

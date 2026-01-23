@@ -1,8 +1,10 @@
+#include "util.h"
+#include "bytecode.h"
 #include <libgen.h>
 #include <stdlib.h>
 #include <string.h>
 
-char *strndup(char *str, int chars) {
+char *strndup(const char *str, int chars) {
   char *buffer;
   int n;
 
@@ -43,4 +45,10 @@ void write_i32(unsigned char *data, int offset, int value) {
   data[offset + 1] = (value >> 8) & 0xFF;
   data[offset + 2] = (value >> 16) & 0xFF;
   data[offset + 3] = (value >> 24) & 0xFF;
+}
+
+const char *read_string(const bytecode *bc, int index) {
+  if (!bc)
+    return NULL;
+  return bc->string_table + index;
 }

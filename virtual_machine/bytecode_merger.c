@@ -145,7 +145,7 @@ static int build_symbol_table(module_list *modules, section_sizes *sizes,
     for (int j = 0; j < bc->public_symbols_count; j++) {
       int name_offset = bc->public_symbols[j * 2];
       int offset = bc->public_symbols[j * 2 + 1];
-      const char *name = bc->string_table + name_offset;
+      const char *name = read_string(bc, name_offset);
 
       int final_offset;
 
@@ -234,7 +234,7 @@ static int apply_substitutions(module *mod, uint8_t *merged_code,
     pos += 4;
 
     // Get the function's name from the module's string table
-    const char *name = (const char *)(bc->string_table + string_table_index);
+    const char *name = read_string(bc, string_table_index);
 
     symbol_entry *sym = symbol_table_find(symbols, name);
     if (!sym) {

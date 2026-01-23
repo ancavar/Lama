@@ -1,5 +1,6 @@
 #ifndef UTIL_H
 #define UTIL_H
+#include "bytecode.h"
 /*
  * Dynamic array macros
  */
@@ -35,6 +36,9 @@
 char *strndup(const char *str, int chars);
 char *strdup(const char *src);
 char *extract_module_name(const char *filename);
+
+/* Read a string from a bytecode object by index into its string table */
+const char *read_string(const bytecode *bc, int index);
 
 /* Read a 32-bit little-endian integer */
 int read_i32(const unsigned char data[], int offset);
