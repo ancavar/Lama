@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static aint pending_closure = 0;
+static aint *pending_closure = NULL;
 
 extern void __init(void);
 
@@ -61,23 +61,27 @@ extern aint Bsexp_tag_patt(void *x);
 /**
  * Retrieves a pointer to a local variable in the current stack frame.
  * Locals are stored below the arguments in the stack.
+ * For closure calls, base points to closure, so args start at base-1.
  */
 static inline aint *get_local(stack_t *stack, call_frame_t *frame, int idx) {
-  return &stack->data[frame->base - frame->n_args - idx];
+  int args_base = frame->closure ? frame->base - 1 : frame->base;
+  return &stack->data[args_base - frame->n_args - idx];
 }
 
 /**
  * Retrieves a pointer to an argument in the current stack frame.
+ * For closure calls, base points to closure, so args start at base-1.
  */
 static inline aint *get_arg(stack_t *stack, call_frame_t *frame, int idx) {
-  return &stack->data[frame->base - idx];
+  int args_base = frame->closure ? frame->base - 1 : frame->base;
+  return &stack->data[args_base - idx];
 }
 
 /**
  * Retrieves a pointer to a variable stored in a closure's environment.
  */
 static inline aint *get_closure_var(call_frame_t *frame, int idx) {
-  data *closure_data = TO_DATA(frame->closure);
+  data *closure_data = TO_DATA(*(frame->closure));
   aint *contents = (aint *)closure_data->contents;
   // +1 because contents[0] is the entry point
   return &contents[idx + 1];
@@ -189,11 +193,14 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
         result = Ls__Infix_3333((void *)x, (void *)y);
         break;
       }
+      VM_DEBUG("BINOP %d: x=%ld, y=%ld -> result=%ld\n", l, UNBOX(x), UNBOX(y),
+               UNBOX(result));
       stack_push(stack, result);
       break;
     }
     case OP_JMP: {
       int addr = read_i32(bc->code, ip);
+      VM_DEBUG("JMP to 0x%08x\n", addr);
       ip = addr;
       break;
     }
@@ -201,6 +208,8 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       int addr = read_i32(bc->code, ip);
       ip += 4;
       aint val = stack_pop(stack);
+      VM_DEBUG("CJMP_Z val=%ld -> %s to 0x%08x\n", UNBOX(val),
+               (UNBOX(val) == 0 ? "JUMP" : "SKIP"), addr);
       if (UNBOX(val) == 0) {
         ip = addr;
       }
@@ -210,6 +219,8 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       int addr = read_i32(bc->code, ip);
       ip += 4;
       aint val = stack_pop(stack);
+      VM_DEBUG("CJMP_NZ val=%ld -> %s to 0x%08x\n", UNBOX(val),
+               (UNBOX(val) != 0 ? "JUMP" : "SKIP"), addr);
       if (UNBOX(val) != 0) {
         ip = addr;
       }
@@ -291,12 +302,15 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       break;
     }
     case OP_DROP:
+      VM_DEBUG("DROP\n");
       stack_pop(stack);
       break;
     case OP_DUP:
+      VM_DEBUG("DUP\n");
       stack_dup(stack);
       break;
     case OP_SWAP:
+      VM_DEBUG("SWAP\n");
       stack_swap(stack);
       break;
     // TODO: possibly unify as well
@@ -307,15 +321,28 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       ip += 4;
       VM_TRACE_CALL("BEGIN n_args=%d n_locals=%d\n", n_args, n_locals);
 
-      // base points to arg0 (highest address of args)
-      int base = (stack->sp - stack->data) + n_args;
+      int base;
+      aint *closure = NULL;
+
+      // Check if we're being called through CALLC
+      if (pending_closure != NULL) {
+        // Stack: [... closure arg0 arg1 ... argN-1]
+        // base points to closure so we clean it up on return
+        base = (stack->sp - stack->data) + n_args + 1;
+        closure = pending_closure;
+        // Clear for next call
+        pending_closure = NULL;
+      } else {
+        // base points to arg0
+        base = (stack->sp - stack->data) + n_args;
+      }
 
       // space for locals
       for (int i = 0; i < n_locals; i++) {
         stack_push(stack, 0);
       }
 
-      call_stack_push(call_stack, return_ip, base, n_args, n_locals, 0);
+      call_stack_push(call_stack, return_ip, base, n_args, n_locals, closure);
       break;
     }
     case OP_BEGIN_CLOSURE: {
@@ -325,9 +352,13 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       ip += 4;
       VM_TRACE_CALL("BEGIN_CLOSURE n_args=%d n_locals=%d\n", n_args, n_locals);
 
-      // CALLC already shifted args and removed closure from stack
-      int base = (stack->sp - stack->data) + n_args;
-      aint closure = pending_closure;
+      // Stack: [... closure arg0 arg1 ... argN-1]
+      // The closure is at sp + n_args + 1, arg0 is at sp + n_args
+      // base points to the closure so we clean it up on return
+      int base = (stack->sp - stack->data) + n_args + 1;
+      aint *closure = pending_closure;
+      // Clear for next call
+      pending_closure = NULL;
 
       // space for locals
       for (int i = 0; i < n_locals; i++) {
@@ -356,7 +387,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
         args[i + 1] = val;
       }
 
-      void *closure = Bclosure(args, BOX(n_captured + 1));
+      void *closure = Bclosure(args, BOX(n_captured));
       stack_push(stack, (aint)closure);
       break;
     }
@@ -364,22 +395,18 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       int n_args = read_i32(bc->code, ip);
       ip += 4;
 
-      // stack: [... closure arg0 arg1 ... argN-1]
-      int base = (stack->sp - stack->data) + n_args + 1;
-      aint closure = stack->data[base];
+      // Stack: [... closure arg0 arg1 ... argN-1]
+      // sp points below argN-1. The closure is at sp + n_args + 1.
 
-      // save closure for BEGIN_CLOSURE to retrieve
-      pending_closure = closure;
+      aint *closure_ptr = stack->sp + n_args + 1;
+      aint closure_val = *closure_ptr;
 
-      // shift args over closure slot, removing closure from stack
-      for (int i = 0; i < n_args; i++) {
-        stack->data[base - i] = stack->data[base - i - 1];
-      }
-      stack->sp++;
+      aint entry = UNBOX(((aint *)closure_val)[0]);
 
-      aint entry = UNBOX(((aint *)closure)[0]);
       VM_TRACE_CALL("CALLC n_args=%d closure=0x%lx entry=0x%lx\n", n_args,
-                    closure, entry);
+                    closure_val, entry);
+      // Store pointer to closure location for BEGIN_CLOSURE to use
+      pending_closure = closure_ptr;
       return_ip = ip;
       ip = entry;
       break;
@@ -396,22 +423,23 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
     }
     case OP_RET:
     case OP_END: {
-      if (call_stack_is_empty(call_stack)) {
-        return;
-      }
       call_frame_t frame = call_stack_pop(call_stack);
 
+      // For closure calls, base points to closure, args start at base-1
+      int args_base = frame.closure ? frame.base - 1 : frame.base;
       int current_top = stack->sp - stack->data;
-      int returns_start = frame.base - frame.n_args - frame.n_locals;
+      int returns_start = args_base - frame.n_args - frame.n_locals;
       int n_returns = returns_start - current_top;
 
+      VM_TRACE_CALL("RET/END: n_returns=%d, return_ip=0x%08x\n", n_returns,
+                    frame.return_ip);
+
       if (n_returns <= 0) {
-        n_returns = 0;
-      } else {
-        for (int i = 0; i < n_returns; i++) {
-          // TODO: make stack function for this
-          stack->data[frame.base - i] = stack->data[returns_start - i];
-        }
+        n_returns = 1;
+      }
+      for (int i = 0; i < n_returns; i++) {
+        // TODO: make a stack function for this
+        stack->data[frame.base - i] = stack->data[returns_start - i];
       }
 
       // sp points to empty slot below the return values
@@ -424,11 +452,14 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
     }
 
     case OP_READ: {
-      stack_push(stack, Lread());
+      aint val = Lread();
+      VM_DEBUG("READ: %ld\n", UNBOX(val));
+      stack_push(stack, val);
       break;
     }
     case OP_WRITE: {
       aint val = stack_pop(stack);
+      VM_DEBUG("WRITE: %ld\n", UNBOX(val));
       stack_push(stack, Lwrite(val));
       break;
     }
@@ -437,6 +468,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       int str_offset = read_i32(bc->code, ip);
       ip += 4;
       const char *src = bc->string_table + str_offset;
+      VM_DEBUG("STRING: \"%s\"\n", src);
       void *str = Bstring((void *)&src);
       stack_push(stack, (aint)str);
       break;
@@ -446,6 +478,8 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       aint idx = stack_pop(stack);
       aint arr = stack_pop(stack);
       void *elem = Belem((void *)arr, idx);
+      VM_DEBUG("ELEM: arr=0x%lx, idx=%ld -> elem=0x%lx\n", arr, UNBOX(idx),
+               (aint)elem);
       stack_push(stack, (aint)elem);
       break;
     }
@@ -454,6 +488,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       aint val = stack_pop(stack);
       aint idx = stack_pop(stack);
       aint arr = stack_pop(stack);
+      VM_DEBUG("STA: arr=0x%lx, idx=%ld, val=0x%lx\n", arr, UNBOX(idx), val);
       Bsta((void *)arr, idx, (void *)val);
       stack_push(stack, val);
       break;
@@ -461,18 +496,21 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
     case OP_LENGTH: {
       aint val = stack_pop(stack);
       aint len = Llength((void *)val);
+      VM_DEBUG("LENGTH: val=0x%lx -> len=%ld\n", val, UNBOX(len));
       stack_push(stack, len);
       break;
     }
     case OP_LSTRING: {
       aint val = stack_pop(stack);
       void *str = Lstring(&val);
+      VM_DEBUG("LSTRING: val=%ld -> str=0x%lx\n", UNBOX(val), (aint)str);
       stack_push(stack, (aint)str);
       break;
     }
     case OP_BARRAY: {
       int n = read_i32(bc->code, ip);
       ip += 4;
+      VM_DEBUG("BARRAY: n=%d\n", n);
       aint args[n];
       for (int i = n - 1; i >= 0; i--) {
         args[i] = stack_pop(stack);
@@ -488,6 +526,8 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       ip += 4;
       const char *tag_str = bc->string_table + tag_offset;
       aint tag_hash = LtagHash((char *)tag_str);
+      VM_DEBUG("SEXP: tag=\"%s\" (hash=0x%lx), n_fields=%d\n", tag_str,
+               tag_hash, n_fields);
       aint args[n_fields + 1];
       for (int i = n_fields - 1; i >= 0; i--) {
         args[i] = stack_pop(stack);
@@ -506,6 +546,8 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       const char *tag_str = bc->string_table + tag_offset;
       aint tag_hash = LtagHash((char *)tag_str);
       aint val = stack_pop(stack);
+      VM_DEBUG("TAG: val=0x%lx, tag=\"%s\" (hash=0x%lx), n_fields=%d\n", val,
+               tag_str, tag_hash, n_fields);
       aint result = Btag((void *)val, tag_hash, BOX(n_fields));
       stack_push(stack, result);
       break;
@@ -514,6 +556,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       int n = read_i32(bc->code, ip);
       ip += 4;
       aint val = stack_pop(stack);
+      VM_DEBUG("ARRAY pattern: val=0x%lx, n=%d\n", val, n);
       aint result = Barray_patt((void *)val, BOX(n));
       stack_push(stack, result);
       break;
@@ -523,6 +566,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       ip += 4;
       int col = read_i32(bc->code, ip);
       ip += 4;
+      VM_DEBUG("FAIL: line %d, col %d\n", line, col);
       fprintf(stderr, "Match failure at line %d, column %d\n", line, col);
       return;
     }
@@ -530,50 +574,62 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       aint y = stack_pop(stack);
       aint x = stack_pop(stack);
       aint result = Bstring_patt((void *)x, (void *)y);
+      VM_DEBUG("PATT_STR_CMP: x=0x%lx, y=0x%lx -> %ld\n", x, y, UNBOX(result));
       stack_push(stack, result);
       break;
     }
     case OP_PATT_STRING: {
       aint val = stack_pop(stack);
       aint result = Bstring_tag_patt((void *)val);
+      VM_DEBUG("PATT_STRING: val=0x%lx -> %ld\n", val, UNBOX(result));
       stack_push(stack, result);
       break;
     }
     case OP_PATT_ARRAY: {
       aint val = stack_pop(stack);
       aint result = Barray_tag_patt((void *)val);
+      VM_DEBUG("PATT_ARRAY: val=0x%lx -> %ld\n", val, UNBOX(result));
       stack_push(stack, result);
       break;
     }
     case OP_PATT_SEXP: {
       aint val = stack_pop(stack);
       aint result = Bsexp_tag_patt((void *)val);
+      VM_DEBUG("PATT_SEXP: val=0x%lx -> %ld\n", val, UNBOX(result));
       stack_push(stack, result);
       break;
     }
     case OP_PATT_BOXED: {
       aint val = stack_pop(stack);
       aint result = Bboxed_patt((void *)val);
+      VM_DEBUG("PATT_BOXED: val=0x%lx -> %ld\n", val, UNBOX(result));
       stack_push(stack, result);
       break;
     }
     case OP_PATT_UNBOXED: {
       aint val = stack_pop(stack);
       aint result = Bunboxed_patt((void *)val);
+      VM_DEBUG("PATT_UNBOXED: val=0x%lx -> %ld\n", val, UNBOX(result));
       stack_push(stack, result);
       break;
     }
     case OP_PATT_CLOSURE: {
       aint val = stack_pop(stack);
       aint result = Bclosure_tag_patt((void *)val);
+      VM_DEBUG("PATT_CLOSURE: val=0x%lx -> %ld\n", val, UNBOX(result));
       stack_push(stack, result);
       break;
     }
     case OP_HALT:
+      VM_DEBUG("HALT\n");
       return;
-    case OP_LINE:
+    case OP_LINE: {
+      int line = read_i32(bc->code, ip);
       ip += 4;
+      VM_DEBUG("LINE %d\n", line);
+      (void)line;
       break;
+    }
     default:
       fprintf(stderr, "Not yet supported opcode 0x%02X at ip=0x%08x\n", opcode,
               ip - 1);

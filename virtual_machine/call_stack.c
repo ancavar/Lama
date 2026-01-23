@@ -1,6 +1,6 @@
 /*
  * Call stack management for the Lama VM.
- * Tracks function activation records (frames), including return addresses, 
+ * Tracks function activation records (frames), including return addresses,
  * base pointers, and arguments.
  */
 
@@ -15,7 +15,7 @@ void call_stack_init(call_stack_t *cs) {
 }
 
 void call_stack_push(call_stack_t *cs, int return_ip, int base, int n_args,
-                     int n_locals, aint closure) {
+                     int n_locals, aint *closure) {
   if (cs->top >= MAX_CALL_DEPTH) {
     fprintf(stderr, "Call stack overflow\n");
     exit(1);
