@@ -9,12 +9,12 @@
 #include "bytecode.h"
 #include "bytecode_merger.h"
 #include "call_stack.h"
+#include "ffi.h"
 #include "module_manager.h"
 #include "opcodes.h"
 #include "stack.h"
 #include "util.h"
 #include "verifier.h"
-#include "util.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -111,9 +111,12 @@ static aint read_designation(stack_t *stack, call_frame_t *frame, aint *globals,
 }
 
 static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
-                         call_stack_t *call_stack, aint *globals) {
+                         call_stack_t *call_stack, aint *globals,
+                         char **ffi_names, int ffi_len) {
   int ip = entry_point;
   int return_ip = -1;
+
+  VM_TRACE_CALL("Entering run_internal at entry_point=%d\n", entry_point);
 
   while (ip < bc->code_size) {
     uint8_t opcode = bc->code[ip++];
@@ -404,22 +407,67 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
 
       aint entry = UNBOX(((aint *)closure_val)[0]);
 
-      VM_TRACE_CALL("CALLC n_args=%d closure=0x%lx entry=0x%lx\n", n_args,
-                    closure_val, entry);
-      // Store pointer to closure location for BEGIN_CLOSURE to use
-      pending_closure = closure_ptr;
-      return_ip = ip;
-      ip = entry;
+      if (IS_FFI_CALL(entry)) {
+        // FFI call
+        int ffi_idx = FFI_INDEX(entry);
+        if (ffi_idx < 0 || ffi_idx >= ffi_len) {
+          fprintf(stderr, "Invalid FFI index: %d\n", ffi_idx);
+          return;
+        }
+        const char *fn_name = ffi_names[ffi_idx];
+        VM_TRACE_CALL("CALLC FFI '%s' n_args=%d\n", fn_name, n_args);
+
+        aint ffi_args[n_args];
+        for (int i = n_args - 1; i >= 0; i--) {
+          ffi_args[i] = stack_pop(stack);
+        }
+
+        // Pop the closure
+        stack_pop(stack);
+
+        // FFI
+        aint result = (aint)ffi_call_c(fn_name, ffi_args, n_args);
+        stack_push(stack, result);
+      } else {
+        VM_TRACE_CALL("CALLC n_args=%d closure=0x%lx entry=0x%lx\n", n_args,
+                      closure_val, entry);
+        // Store pointer to closure location for BEGIN_CLOSURE to use
+        pending_closure = closure_ptr;
+        return_ip = ip;
+        ip = entry;
+      }
       break;
     }
     case OP_CALL: {
       int addr = read_i32(bc->code, ip);
       ip += 4;
-      // discarding n_args
+      int n_args = read_i32(bc->code, ip);
       ip += 4;
-      VM_TRACE_CALL("CALL addr=0x%08X\n", addr);
-      return_ip = ip;
-      ip = addr;
+
+      if (IS_FFI_CALL(addr)) {
+        // FFI call
+        // TODO: UNIFY WITH CALLC
+        int ffi_idx = FFI_INDEX(addr);
+        if (ffi_idx < 0 || ffi_idx >= ffi_len) {
+          fprintf(stderr, "Invalid FFI index: %d\n", ffi_idx);
+          return;
+        }
+        const char *fn_name = ffi_names[ffi_idx];
+        VM_TRACE_CALL("CALL FFI '%s' n_args=%d\n", fn_name, n_args);
+
+        aint args[n_args];
+        for (int i = n_args - 1; i >= 0; i--) {
+          args[i] = stack_pop(stack);
+        }
+
+        // FFI
+        aint result = ffi_call_c(fn_name, args, n_args);
+        stack_push(stack, result);
+      } else {
+        VM_TRACE_CALL("CALL addr=0x%08X\n", addr);
+        return_ip = ip;
+        ip = addr;
+      }
       break;
     }
     case OP_RET:
@@ -468,7 +516,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       // push string from string table onto stack
       int str_offset = read_i32(bc->code, ip);
       ip += 4;
-  const char *src = read_string(bc, str_offset);
+      const char *src = read_string(bc, str_offset);
       VM_DEBUG("STRING: \"%s\"\n", src);
       void *str = Bstring((void *)&src);
       stack_push(stack, (aint)str);
@@ -525,7 +573,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       ip += 4;
       int n_fields = read_i32(bc->code, ip);
       ip += 4;
-  const char *tag_str = read_string(bc, tag_offset);
+      const char *tag_str = read_string(bc, tag_offset);
       aint tag_hash = LtagHash((char *)tag_str);
       VM_DEBUG("SEXP: tag=\"%s\" (hash=0x%lx), n_fields=%d\n", tag_str,
                tag_hash, n_fields);
@@ -544,7 +592,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       ip += 4;
       int n_fields = read_i32(bc->code, ip);
       ip += 4;
-  const char *tag_str = read_string(bc, tag_offset);
+      const char *tag_str = read_string(bc, tag_offset);
       aint tag_hash = LtagHash((char *)tag_str);
       aint val = stack_pop(stack);
       VM_DEBUG("TAG: val=0x%lx, tag=\"%s\" (hash=0x%lx), n_fields=%d\n", val,
@@ -677,7 +725,9 @@ void run_merged(merged_bytecode *merged) {
     // Clear the call stack for each execution
     call_stack_init(&call_stack);
 
-    run_internal(merged->bc, entry, &stack, &call_stack, globals);
+    // TODO: vm structure
+    run_internal(merged->bc, entry, &stack, &call_stack, globals,
+                 merged->ffi_names, merged->ffi_len);
   }
 }
 

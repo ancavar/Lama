@@ -45,6 +45,16 @@ int read_i32(const unsigned char data[], int offset);
 /* Write a 32-bit little-endian integer */
 void write_i32(unsigned char *data, int offset, int value);
 
+/*
+ * Sentinel value for FFI function calls.
+ * Address = -(ffi_index + 1), so index 0 becomes -1, index 1 becomes -2, etc.
+ * TODO: think about a better way?
+ */
+#define TO_FFI_CALL(idx) (-(idx) - 1)
+#define IS_FFI_CALL(addr) ((addr) < 0)
+#define FFI_INDEX(addr) (-(addr) - 1)
+
+
 // TODO: quite ugly
 #ifdef DEBUG_PRINT
 #define STACK_PEEK_SIZE 5

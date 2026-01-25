@@ -1319,6 +1319,10 @@ class env cmd imports =
   end [@@ocaml.warning "-15"]
 
 let compile cmd ((imports, _), p) =
+    (* TODO: better solution *)
+  let replace_escaped_symbols s = Str.global_replace (Str.regexp "\\\\n") "\n" @@
+                                  Str.global_replace (Str.regexp "\\\\r") "\r" @@
+                                  Str.global_replace (Str.regexp "\\\\t") "\t" s in
   let rec pattern env lfalse = function
     | Pattern.Wildcard -> (env, false, [ DROP ])
     | Pattern.Named (_, p) -> pattern env lfalse p
@@ -1482,7 +1486,7 @@ let compile cmd ((imports, _), p) =
         | _ -> (env, false, line @ [ LD acc ]))
     | Expr.Ref _ -> failwith "Should not happen. Indirect assignemts are temporarily prohibited."
     | Expr.Const n -> (env, false, [ CONST n ])
-    | Expr.String s -> (env, false, [ STRING s ])
+    | Expr.String s -> (env, false, [ STRING (replace_escaped_symbols s) ])
     | Expr.Binop (op, x, y) ->
         let lop, env = env#get_label in
         add_code (compile_list false lop env [ x; y ]) lop false [ BINOP op ]

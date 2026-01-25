@@ -25,13 +25,45 @@ typedef struct {
   size_t cap;
 } symbol_table;
 
+/*
+ * These are functions that couldn't be resolved to any module's public symbols,
+ * meaning they must be called using FFI.
+ * TODO: also hashmap?
+ */
+typedef struct {
+  char **data;
+  size_t len;
+  size_t cap;
+} ffi_table;
+/*
+ * Initialize an FFI function table.
+ * No free - ownership is transferred to merged bytecode.
+ */
+static inline void ffi_table_init(ffi_table *table) { da_init((*table)); }
+
+/*
+ * Find or add an FFI function name. Returns the index (0-based).
+ */
+static int ffi_table_add(ffi_table *table, const char *name) {
+  // Check if already exists
+  for (size_t i = 0; i < table->len; i++) {
+    if (strcmp(table->data[i], name) == 0) {
+      return (int)i;
+    }
+  }
+
+  char *s = strdup(name);
+  da_append((*table), s);
+  return (int)(table->len - 1);
+}
+
 typedef struct {
   int string_table_base; // Base offset into merged string table
   int code_base;         // Base offset into merged code section
   int global_base;       // Base index for globals (1-indexed, 0 reserved)
 } module_relocation;
 
-static void symbol_table_init(symbol_table *table) { da_init((*table)); }
+static inline void symbol_table_init(symbol_table *table) { da_init((*table)); }
 
 static void symbol_table_free(symbol_table *table) {
   for (size_t i = 0; i < table->len; i++) {
@@ -221,8 +253,8 @@ static void relocate_internal_references(uint8_t *code_buffer, int size,
 }
 
 static int apply_substitutions(module *mod, uint8_t *merged_code,
-                               module_relocation *reloc,
-                               symbol_table *symbols) {
+                               module_relocation *reloc, symbol_table *symbols,
+                               ffi_table *ffi) {
   bytecode *bc = mod->bc;
   const uint8_t *pos = bc->subst_table;
   const uint8_t *end = pos + bc->subst_table_size;
@@ -237,25 +269,33 @@ static int apply_substitutions(module *mod, uint8_t *merged_code,
     const char *name = read_string(bc, string_table_index);
 
     symbol_entry *sym = symbol_table_find(symbols, name);
-    if (!sym) {
-      fprintf(stderr, "Undefined reference to '%s' in module '%s'\n", name,
-              mod->name);
-      return -1;
+    int final_value;
+
+    if (sym) {
+      final_value = sym->final_value;
+      VM_DEBUG("Patched '%s' at %d with %d\n", name, reloc->code_base + offset,
+               final_value);
+    } else {
+      // FFI function - add to FFI table and use sentinel
+      int ffi_idx = ffi_table_add(ffi, name);
+      final_value = TO_FFI_CALL(ffi_idx);
+      VM_DEBUG("FFI '%s' at %d -> extern[%d] (sentinel=%d)\n", name,
+               reloc->code_base + offset, ffi_idx, final_value);
     }
 
     // offset is relative to a module start, so adds reloc->code_base
     int absolute_offset = reloc->code_base + offset;
-    write_i32(merged_code, absolute_offset, sym->final_value);
+    write_i32(merged_code, absolute_offset, final_value);
 
     VM_DEBUG("Patched '%s' at %d with %d\n", name, absolute_offset,
-             sym->final_value);
+             final_value);
   }
   return 0;
 }
 
 static void build_merged(uint8_t *merged_code, char *merged_string_table,
                          module_list *modules, section_sizes *sizes,
-                         symbol_table *table) {
+                         symbol_table *symbols, ffi_table *ffi) {
   // Copy string table
   for (size_t i = 0; i < modules->modules.len; i++) {
     module *mod = modules->modules.data[i];
@@ -278,7 +318,7 @@ static void build_merged(uint8_t *merged_code, char *merged_string_table,
 
     relocate_internal_references(mod_code_start, mod->bc->code_size, reloc);
 
-    apply_substitutions(mod, merged_code, reloc, table);
+    apply_substitutions(mod, merged_code, reloc, symbols, ffi);
   }
 }
 
@@ -306,6 +346,8 @@ merged_bytecode *merge_modules(module_list *modules) {
   merged_bytecode *merged = malloc(sizeof(merged_bytecode));
   bytecode *bc = malloc(sizeof(bytecode));
   merged->bc = bc;
+  merged->ffi_names = NULL;
+  merged->ffi_len = 0;
 
   section_sizes *sizes = calculate_section_sizes(modules);
   if (!sizes)
@@ -317,6 +359,9 @@ merged_bytecode *merge_modules(module_list *modules) {
     return NULL;
   }
 
+  ffi_table ffi;
+  ffi_table_init(&ffi);
+
   bc->code_size = sizes->total_code_size;
   uint8_t *merged_code = malloc(bc->code_size);
   bc->code = merged_code;
@@ -327,11 +372,16 @@ merged_bytecode *merge_modules(module_list *modules) {
 
   bc->globals_count = sizes->total_globals_len;
 
-  build_merged(merged_code, merged_string_table, modules, sizes, &symbols);
+  build_merged(merged_code, merged_string_table, modules, sizes, &symbols,
+               &ffi);
 
   // TODO: topological order
   // actually maybe there is a better way
   collect_main_entries(&symbols, &merged->main_entries, &merged->main_count);
+
+  // Transfer FFI table to merged bytecode
+  merged->ffi_names = ffi.data;
+  merged->ffi_len = (int)ffi.len;
 
   free_section_sizes(sizes);
   symbol_table_free(&symbols);
@@ -347,6 +397,13 @@ void free_merged_bytecode(merged_bytecode *mb) {
       free(mb->bc);
     }
     free(mb->main_entries);
+    // Free FFI names
+    if (mb->ffi_names) {
+      for (int i = 0; i < mb->ffi_len; i++) {
+        free(mb->ffi_names[i]);
+      }
+      free(mb->ffi_names);
+    }
     free(mb);
   }
 }

@@ -5,6 +5,7 @@
  * - All sections (string tables, code) concatenated and relocated
  * - All cross-references resolved
  * - List of all main() function entry points
+ * - List of all FFI (external) function names
  */
 
 #ifndef BYTECODE_MERGER_H
@@ -16,9 +17,11 @@
 
 /* Result of merging modules */
 typedef struct {
-  bytecode *bc;      // Merged bytecode
-  int *main_entries; // main() entry point offsets
-  int main_count;    // Number of main() entries
+  bytecode *bc;      /* Merged bytecode */
+  int *main_entries; /* Array of main() entry point offsets */
+  int main_count;    /* Number of main() entry points */
+  char **ffi_names;  /* Array of FFI function names */
+  int ffi_len;       /* Number of FFI functions */
 } merged_bytecode;
 
 /*
