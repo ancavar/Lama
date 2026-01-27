@@ -105,7 +105,6 @@ static aint call_variadic_function(const char *target_name, int fixed_args,
   ffi_type *arg_types[n_args];
   void *arg_values[n_args];
   aint int_values[n_args];
-  void *ptr_values[n_args];
 
   for (int i = 0; i < n_args; i++) {
     if (UNBOXED(args[i])) {
@@ -113,9 +112,8 @@ static aint call_variadic_function(const char *target_name, int fixed_args,
       arg_types[i] = &ffi_type_pointer;
       arg_values[i] = &int_values[i];
     } else {
-      ptr_values[i] = (void *)args[i];
       arg_types[i] = &ffi_type_pointer;
-      arg_values[i] = &ptr_values[i];
+      arg_values[i] = &args[i];
     }
   }
 
