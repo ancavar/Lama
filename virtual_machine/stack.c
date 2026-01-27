@@ -14,9 +14,7 @@ void stack_init(stack_t *s) {
   // mandated by gc
   s->sp = s->data + STACK_SIZE - 1;
   __gc_stack_bottom = ((size_t)(s->data + STACK_SIZE));
-  // __gc_stack_top = (size_t)s->sp & ~0xFUL;
-  // TODO: so it's not moving, needs to be fixed
-  __gc_stack_top = ((size_t)s->data - 16 * sizeof(size_t)) & ~0xFUL;
+  __gc_stack_top = ((size_t)(s->data));
 }
 
 void stack_push(stack_t *s, aint val) {
@@ -25,9 +23,6 @@ void stack_push(stack_t *s, aint val) {
     exit(1);
   }
   *s->sp-- = val;
-  // if (((size_t)s->sp & 0xF) == 0) {
-  //   __gc_stack_top = (size_t)s->sp;
-  // }
 }
 
 aint stack_pop(stack_t *s) {

@@ -7,7 +7,7 @@
 #define STACK_SIZE 1024
 
 typedef struct {
-  aint data[STACK_SIZE];
+  __attribute__((aligned(16))) aint data[STACK_SIZE];
   aint *sp;
 } stack_t;
 
