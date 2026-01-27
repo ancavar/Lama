@@ -183,6 +183,7 @@ cleanup:
 }
 /*
  * Based on Kahn's algorithm.
+ * TODO: remove since we preserve order during bytecode compilation.
  */
 static bool topological_sort(module_list *list) {
   int n = list->modules.len;

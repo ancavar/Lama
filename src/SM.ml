@@ -174,7 +174,7 @@ module ByteCode = struct
     let lmap = Hashtbl.create 32 in
     let externs = Stdlib.ref S.empty in
     let pubs = Stdlib.ref S.empty in
-    let imports = Stdlib.ref S.empty in
+    let imports = Stdlib.ref [] in
     let globals = Hashtbl.create 16 in
     let fixups = Stdlib.ref [] in
     let func_fixups = Stdlib.ref [] in
@@ -185,17 +185,17 @@ module ByteCode = struct
       then Hashtbl.replace globals l 0 (* 0 is the placeholder for globals externs *)
       else externs := S.add l !externs in
     let add_public l = pubs := S.add l !pubs in
-    let add_import l = imports := S.add l !imports in
+    let add_import l = imports := l :: !imports in
     let add_fixup l = fixups := (Buffer.length code, l) :: !fixups in
     let add_func_fixup l = func_fixups := (Buffer.length code, l) :: !func_fixups in
     let add_var_subst l = vars_substs := (Buffer.length code, l) :: !vars_substs in
     let add_bytes = List.iter (fun x -> Buffer.add_char code @@ Char.chr x) in
     let add_ints =
-      List.iter (fun x -> Buffer.add_int32_ne code @@ Int32.of_int x)
+      List.iter (fun x -> Buffer.add_int32_le code @@ Int32.of_int x)
     in
     let add_strings =
       List.iter (fun x ->
-          Buffer.add_int32_ne code @@ Int32.of_int @@ StringTab.add st x)
+          Buffer.add_int32_le code @@ Int32.of_int @@ StringTab.add st x)
     in
     let add_designations n =
       let b x = match n with None -> x | Some b -> (b * 16) + x in
@@ -351,8 +351,8 @@ module ByteCode = struct
         Bytes.set_int32_ne code addr_ofs
           (Int32.of_int
           @@
-          try Hashtbl.find lmap l
-          with Not_found ->
+            try Hashtbl.find lmap l
+            with Not_found ->
             add_subst addr_ofs l; 0))
       !func_fixups;
     List.iter
@@ -360,9 +360,9 @@ module ByteCode = struct
         Bytes.set_int32_ne code ofs
           (Int32.of_int
           @@
-          try Hashtbl.find lmap l
-          with Not_found ->
-            failwith (Printf.sprintf "ERROR: undefined label '%s'" l)))
+            try Hashtbl.find lmap l
+            with Not_found ->
+              failwith (Printf.sprintf "ERROR: undefined label '%s'" l)))
       !fixups;
     let pubs =
       List.map (fun l ->
@@ -377,30 +377,26 @@ module ByteCode = struct
       @@ S.elements !pubs
     in
     let imports =
-      List.map (fun l -> Int32.of_int @@ StringTab.add st l)
-      @@ S.elements !imports
+      List.rev_map (fun l -> Int32.of_int @@ StringTab.add st l) !imports
     in
     let subst_table = Buffer.create 1024 in
     List.iter
       (fun (c, l) ->
-        Buffer.add_int32_ne subst_table @@ Int32.of_int c;
-        Buffer.add_int32_ne subst_table @@ Int32.of_int (StringTab.add st l))
+        Buffer.add_int32_le subst_table @@ Int32.of_int c;
+        Buffer.add_int32_le subst_table @@ Int32.of_int (StringTab.add st l))
       !substs;
     let str_table = Buffer.to_bytes st.StringTab.buffer in
     let file = Buffer.create 1024 in
-    Buffer.add_int32_ne file (Int32.of_int @@ Bytes.length str_table);
-    Buffer.add_int32_ne file (Int32.of_int @@ Hashtbl.length globals);
-    Buffer.add_int32_ne file (Int32.of_int @@ Buffer.length subst_table);
-    Buffer.add_int32_ne file (Int32.of_int @@ List.length imports);
-    Buffer.add_int32_ne file (Int32.of_int @@ List.length pubs);
-    List.iter
-      (fun (n) ->
-        Buffer.add_int32_ne file n)
-      imports;
+    Buffer.add_int32_le file (Int32.of_int @@ Bytes.length str_table);
+    Buffer.add_int32_le file (Int32.of_int @@ Hashtbl.length globals);
+    Buffer.add_int32_le file (Int32.of_int @@ Buffer.length subst_table);
+    Buffer.add_int32_le file (Int32.of_int @@ List.length imports);
+    Buffer.add_int32_le file (Int32.of_int @@ List.length pubs);
+    List.iter (fun n -> Buffer.add_int32_le file n) imports;
     List.iter
       (fun (n, o) ->
-        Buffer.add_int32_ne file n;
-        Buffer.add_int32_ne file o)
+        Buffer.add_int32_le file n;
+        Buffer.add_int32_le file o)
       pubs;
     Buffer.add_bytes file str_table;
     Buffer.add_bytes file @@ Buffer.to_bytes subst_table;
@@ -1095,11 +1091,11 @@ class env cmd imports =
       in
       List.flatten
       @@ List.map (function
-           | name, `Extern, f -> [ EXTERN (opt_label f name) ]
-           | name, `Public, f -> [ PUBLIC (opt_label f name) ]
-           | name, `PublicExtern, f ->
-               [ PUBLIC (opt_label f name); EXTERN (opt_label f name) ]
-           | _ -> invalid_arg "must not happen")
+        | name, `Extern, f -> [ EXTERN (opt_label f name) ]
+        | name, `Public, f -> [ PUBLIC (opt_label f name) ]
+        | name, `PublicExtern, f ->
+            [ PUBLIC (opt_label f name); EXTERN (opt_label f name) ]
+        | _ -> invalid_arg "must not happen")
       @@ List.filter (function _, `Local, _ -> false | _ -> true) decls
 
     method push_scope (blab : string) (elab : string) =
@@ -1317,7 +1313,7 @@ class env cmd imports =
   end [@@ocaml.warning "-15"]
 
 let compile cmd ((imports, _), p) =
-    (* TODO: better solution *)
+  (* TODO: better solution *)
   let replace_escaped_symbols s = Str.global_replace (Str.regexp "\\\\n") "\n" @@
                                   Str.global_replace (Str.regexp "\\\\r") "\r" @@
                                   Str.global_replace (Str.regexp "\\\\t") "\t" s in
@@ -1612,8 +1608,8 @@ let compile cmd ((imports, _), p) =
                   Some lfalse,
                   i + 1,
                   ((match lab with
-                   | None -> [ SLABEL blab ]
-                   | Some l -> [ SLABEL blab; LABEL l; DUP ])
+                     | None -> [ SLABEL blab ]
+                     | Some l -> [ SLABEL blab; LABEL l; DUP ])
                   @ pcode @ bindcode @ scode @ jmp @ [ SLABEL elab ])
                   :: code,
                   lfalse' )
