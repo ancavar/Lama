@@ -18,23 +18,21 @@ typedef struct {
   const char *target_name;
   bool is_args_array;
   int fixed_args;
-  // Seems useless but explicit
-  ffi_type *return_type;
 } func_metadata;
 
 static const func_metadata func_table[] = {
     // Args array functions
-    {"Lsubstring", "Lsubstring", true, 0, &ffi_type_pointer},
-    {"Lstringcat", "Lstringcat", true, 0, &ffi_type_pointer},
-    {"Lstring", "Lstring", true, 0, &ffi_type_pointer},
-    {"Li__Infix_4343", "Li__Infix_4343", true, 0, &ffi_type_pointer}, // strcat
-    {"Ls__Infix_58", "Ls__Infix_58", true, 0, &ffi_type_pointer}, // : (cons)
-    {"Lclone", "Lclone", true, 0, &ffi_type_pointer},             // clone
+    {"Lsubstring", "Lsubstring", true, 0},
+    {"Lstringcat", "Lstringcat", true, 0},
+    {"Lstring", "Lstring", true, 0},
+    {"Li__Infix_4343", "Li__Infix_4343", true, 0}, // strcat
+    {"Ls__Infix_58", "Ls__Infix_58", true, 0},     // : (cons)
+    {"Lclone", "Lclone", true, 0},                 // clone
 
     // Variadic functions with mapping
-    {"Lprintf", "Bprintf", false, 1, &ffi_type_void},
-    {"Lfprintf", "Bfprintf", false, 2, &ffi_type_void},
-    {"Lsprintf", "Bsprintf", false, 1, &ffi_type_pointer},
+    {"Lprintf", "Bprintf", false, 1},
+    {"Lfprintf", "Bfprintf", false, 2},
+    {"Lsprintf", "Bsprintf", false, 1},
 
     // Sentinel
     {NULL, NULL, false, 0, NULL}};
@@ -90,8 +88,7 @@ static aint call_args_array_function(const char *name, aint *args) {
  * TODO: very ugly
  */
 static aint call_variadic_function(const char *target_name, int fixed_args,
-                                   ffi_type *return_type, aint *args,
-                                   int n_args) {
+                                   aint *args, int n_args) {
   void *fn = lookup_function(target_name);
   if (!fn) {
     fprintf(stderr, "Undefined external function: %s\n", target_name);
@@ -124,7 +121,7 @@ static aint call_variadic_function(const char *target_name, int fixed_args,
 
   // TODO: ABI ?
   ffi_status status = ffi_prep_cif_var(&cif, FFI_DEFAULT_ABI, fixed_args,
-                                       n_args, return_type, arg_types);
+                                       n_args, &ffi_type_pointer, arg_types);
 
   if (status != FFI_OK) {
     fprintf(stderr, "FFI prep failed for '%s': status=%d\n", target_name,
@@ -173,8 +170,8 @@ aint ffi_call_c(const char *name, aint *args, int n_args) {
     if (meta->is_args_array) {
       return call_args_array_function(meta->target_name, args);
     } else {
-      return call_variadic_function(meta->target_name, meta->fixed_args,
-                                    meta->return_type, args, n_args);
+      return call_variadic_function(meta->target_name, meta->fixed_args, args,
+                                    n_args);
     }
   }
 
