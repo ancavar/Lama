@@ -15,24 +15,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-
 #define HEADER_SIZE 20
 #define PUB_ENTRY_SIZE 8
 #define IMPORT_ENTRY_SIZE 4
-
-static int find_entry_point(const uint8_t *data, int pubs_offset, int num_pubs,
-                            const uint8_t *string_table, const char *name) {
-  for (int i = 0; i < num_pubs; i++) {
-    int entry_offset = pubs_offset + i * PUB_ENTRY_SIZE;
-    int name_offset = read_i32(data, entry_offset);
-    char *f_name = (char *)(string_table + name_offset);
-    int address = read_i32(data, entry_offset + 4);
-    if (strcmp(f_name, name) == 0) {
-      return address;
-    }
-  }
-  return -1;
-}
 
 bytecode *load_bytecode(const char *filename) {
   int fd = open(filename, O_RDONLY);
@@ -73,8 +58,6 @@ bytecode *load_bytecode(const char *filename) {
   int code_size = size - code_offset;
 
   uint8_t *string_table = data + st_offset;
-  int main_entry_point =
-      find_entry_point(data, pubs_offset, num_pubs, string_table, "main");
 
   bytecode *bc = malloc(sizeof(bytecode));
   if (!bc) {
@@ -84,7 +67,6 @@ bytecode *load_bytecode(const char *filename) {
 
   bc->code = data + code_offset;
   bc->code_size = code_size;
-  bc->entry_point = main_entry_point;
   bc->globals_count = globals_count;
   bc->public_symbols_count = num_pubs;
   bc->string_table = (const char *)string_table;

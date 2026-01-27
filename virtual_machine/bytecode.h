@@ -7,7 +7,6 @@
 typedef struct {
   const uint8_t *code;
   int code_size;       // Size of code section
-  int entry_point;     // Main function
   int globals_count;   // Global count
   int *public_symbols; // Public functions and global variables
   int public_symbols_count;
