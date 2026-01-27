@@ -105,6 +105,7 @@ static aint call_variadic_function(const char *target_name, int fixed_args,
   ffi_type *arg_types[n_args];
   void *arg_values[n_args];
   aint int_values[n_args];
+  void *result = NULL;
 
   for (int i = 0; i < n_args; i++) {
     if (UNBOXED(args[i])) {
@@ -127,8 +128,8 @@ static aint call_variadic_function(const char *target_name, int fixed_args,
     exit(1);
   }
 
-  ffi_call(&cif, FFI_FN(fn), NULL, arg_values);
-  return BOX(0);
+  ffi_call(&cif, FFI_FN(fn), &result, arg_values);
+  return (aint)result;
 }
 
 static aint call_regular_function(const char *name, aint *args, int n_args) {

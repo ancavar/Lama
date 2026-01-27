@@ -4,7 +4,7 @@
 #include "../runtime/runtime_common.h"
 #include <stddef.h>
 
-#define MAX_CALL_DEPTH 1024
+#define MAX_CALL_DEPTH 8192
 
 typedef struct {
   int return_ip;

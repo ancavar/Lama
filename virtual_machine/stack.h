@@ -4,7 +4,7 @@
 #include "../runtime/runtime_common.h"
 #include <stddef.h>
 
-#define STACK_SIZE 1024
+#define STACK_SIZE 8192
 
 typedef struct {
   __attribute__((aligned(16))) aint data[STACK_SIZE];
