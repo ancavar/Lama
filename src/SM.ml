@@ -171,19 +171,18 @@ module ByteCode = struct
   let compile cmd insns =
     let code = Buffer.create 256 in
     let st = StringTab.create () in
-    let lmap = Stdlib.ref M.empty in
+    let lmap = Hashtbl.create 32 in
     let externs = Stdlib.ref S.empty in
     let pubs = Stdlib.ref S.empty in
     let imports = Stdlib.ref S.empty in
-    let globals = Stdlib.ref @@ M.empty in
-    let glob_count = Stdlib.ref 1 in (* 0 is the placeholder for globals externs *)
+    let globals = Hashtbl.create 16 in
     let fixups = Stdlib.ref [] in
     let func_fixups = Stdlib.ref [] in
     let vars_substs = Stdlib.ref [] in
-    let add_lab l = lmap := M.add l (Buffer.length code) !lmap in
+    let add_lab l = Hashtbl.replace lmap l (Buffer.length code) in
     let add_extern l =
       if String.starts_with ~prefix:"global_" l
-      then globals := M.add l 0 !globals (* 0 is the placeholder for globals externs *)
+      then Hashtbl.replace globals l 0 (* 0 is the placeholder for globals externs *)
       else externs := S.add l !externs in
     let add_public l = pubs := S.add l !pubs in
     let add_import l = imports := S.add l !imports in
@@ -204,11 +203,10 @@ module ByteCode = struct
         | Value.Global s ->
             let s' = "global_" ^ s in
             let i =
-              try M.find s' !globals
+              try Hashtbl.find globals s'
               with Not_found ->
-                let i = !glob_count in
-                incr glob_count;
-                globals := M.add s' i !globals;
+                let i = Hashtbl.length globals + 1 in
+                Hashtbl.add globals s' i;
                 i
             in
             add_bytes [ b 0 ];
@@ -353,7 +351,7 @@ module ByteCode = struct
         Bytes.set_int32_ne code addr_ofs
           (Int32.of_int
           @@
-          try M.find l !lmap
+          try Hashtbl.find lmap l
           with Not_found ->
             add_subst addr_ofs l; 0))
       !func_fixups;
@@ -362,18 +360,18 @@ module ByteCode = struct
         Bytes.set_int32_ne code ofs
           (Int32.of_int
           @@
-          try M.find l !lmap
+          try Hashtbl.find lmap l
           with Not_found ->
             failwith (Printf.sprintf "ERROR: undefined label '%s'" l)))
       !fixups;
-        let pubs =
+    let pubs =
       List.map (fun l ->
           ( Int32.of_int @@ StringTab.add st l,
             Int32.of_int
             @@
             let is_global = String.starts_with ~prefix:"global_" l in
             (* 0 was reserved for extern globals *)
-            try (if is_global then Int.max (M.find l !globals - 1) 0 else M.find l !lmap)
+            try (if is_global then Int.max (Hashtbl.find globals l - 1) 0 else Hashtbl.find lmap l)
             with Not_found ->
               failwith (Printf.sprintf "ERROR: undefined label of public '%s'" l) ))
       @@ S.elements !pubs
@@ -391,7 +389,7 @@ module ByteCode = struct
     let str_table = Buffer.to_bytes st.StringTab.buffer in
     let file = Buffer.create 1024 in
     Buffer.add_int32_ne file (Int32.of_int @@ Bytes.length str_table);
-    Buffer.add_int32_ne file (Int32.of_int @@ !glob_count - 1); (* 0 was reserved for extern globals *)
+    Buffer.add_int32_ne file (Int32.of_int @@ Hashtbl.length globals);
     Buffer.add_int32_ne file (Int32.of_int @@ Buffer.length subst_table);
     Buffer.add_int32_ne file (Int32.of_int @@ List.length imports);
     Buffer.add_int32_ne file (Int32.of_int @@ List.length pubs);
