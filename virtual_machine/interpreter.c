@@ -669,9 +669,6 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
       stack_push(stack, result);
       break;
     }
-    case OP_HALT:
-      VM_DEBUG("HALT\n");
-      return;
     case OP_LINE: {
       int line = read_i32(bc->code, ip);
       ip += 4;

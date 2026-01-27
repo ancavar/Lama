@@ -154,10 +154,6 @@ int decode_instr(const uint8_t *code, int ip, int code_size,
     instr->size = 1;
     break;
 
-  case OP_HALT:
-    instr->size = 1;
-    break;
-
   default:
     return -1; // Unknown opcode
   }
