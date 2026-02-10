@@ -208,6 +208,9 @@ module ByteCode = struct
         let rec iterate i =
           if i < n then
             match x.[i] with
+            | '"' -> 
+                Buffer.add_char buf '"';
+                iterate (i + 1)
             | '\\' -> (
                 if i + 1 >= n then
                   Buffer.add_char buf '\\'
@@ -221,12 +224,6 @@ module ByteCode = struct
                       iterate (i + 2)
                   | 'r' ->
                       Buffer.add_char buf '\r';
-                      iterate (i + 2)
-                  | '"' ->
-                      Buffer.add_char buf '"';
-                      iterate (i + 2)
-                  | '\\' ->
-                      Buffer.add_char buf '\\';
                       iterate (i + 2)
                   | _ ->
                       Buffer.add_char buf '\\';
