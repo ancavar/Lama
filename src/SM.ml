@@ -184,16 +184,17 @@ module ByteCode = struct
     let func_fixups = Stdlib.ref [] in
     let add_lab l = Hashtbl.replace lmap l (Buffer.length code) in
     let add_global name =
-      try Hashtbl.find globals name
+      let global_name = labeled_global name in
+      try Hashtbl.find globals global_name
       with Not_found ->
         let i = Hashtbl.length globals in
-        Hashtbl.add globals name i;
+        Hashtbl.add globals global_name i;
         i
     in
     let add_extern l = externs := S.add l !externs in
-    let add_public name is_global offset =
+    let add_public name is_global =
       let flag = if is_global then pub_flag_global else pub_flag_function in
-      pubs := (name, offset, flag) :: !pubs in
+      pubs := (name, flag) :: !pubs in
     let add_import l = imports := l :: !imports in
     let add_fixup l = fixups := (Buffer.length code, l) :: !fixups in
     let add_func_fixup l = func_fixups := (Buffer.length code, l) :: !func_fixups in
@@ -243,7 +244,6 @@ module ByteCode = struct
       List.iter (function
         | Value.Global s ->
             if S.mem (labeled_global s) !externs then begin
-              (* TODO: actually we don't really need to use global_ prefix *)
               let str_off = StringTab.add st (labeled_global s) in
               add_bytes [ b 0 ];
               add_ints [ -(str_off + 1) ]
@@ -368,7 +368,7 @@ module ByteCode = struct
       | EXTERN s -> 
         add_extern s
       | PUBLIC (s, f) ->
-          add_public s (not f) 0
+          add_public s (not f)
       | IMPORT s -> add_import s
       | _ ->
           failwith
@@ -398,24 +398,18 @@ module ByteCode = struct
               failwith (Printf.sprintf "ERROR: undefined label '%s'" l)))
       !fixups;
     let pubs_resolved =
-      List.rev_map (fun (name, offset, flag) ->
-          let final_offset = 
+      List.rev_map (fun (name, flag) ->
+          let pos = 
             if flag = pub_flag_global then
-              (* The hashtable uses names without the "global_" prefix *)
-              let global_name = 
-                if String.starts_with ~prefix:global_label name then
-                  String.sub name (String.length global_label) (String.length name - String.length global_label)
-                else name
-              in
-              try Hashtbl.find globals global_name
+              try Hashtbl.find globals name
               with Not_found ->
-                failwith (Printf.sprintf "ERROR: undefined global variable '%s' (lookup: '%s')" name global_name)
+                failwith (Printf.sprintf "ERROR: undefined global variable '%s'" name)
             else 
               try Hashtbl.find lmap name
               with Not_found ->
                 failwith (Printf.sprintf "ERROR: undefined label of public '%s'" name)
           in
-          (Int32.of_int @@ StringTab.add st name, Int32.of_int final_offset, Int32.of_int flag))
+          (Int32.of_int @@ StringTab.add st name, Int32.of_int pos, Int32.of_int flag))
         !pubs
     in
     let imports =
