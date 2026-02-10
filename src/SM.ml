@@ -90,8 +90,8 @@ type insn =
   | FAIL of Loc.t * bool
   (* external definition                       *)
   | EXTERN of string
-  (* public   definition                       *)
-  | PUBLIC of string
+  (* public   definition (name, is a function) *)
+  | PUBLIC of string * bool
   (* import clause                             *)
   | IMPORT of string
   (* line info                                 *)
@@ -367,9 +367,8 @@ module ByteCode = struct
       | PATT p -> add_bytes [ (6 * 16) + enum patt p ]
       | EXTERN s -> 
         add_extern s
-      | PUBLIC s ->
-          let is_global = String.starts_with ~prefix:global_label s in
-          add_public s is_global 0
+      | PUBLIC (s, f) ->
+          add_public s (not f) 0
       | IMPORT s -> add_import s
       | _ ->
           failwith
@@ -1128,9 +1127,9 @@ class env cmd imports =
       List.flatten
       @@ List.map (function
         | name, `Extern, f -> [ EXTERN (opt_label f name) ]
-        | name, `Public, f -> [ PUBLIC (opt_label f name) ]
+        | name, `Public, f -> [ PUBLIC (opt_label f name, f) ]
         | name, `PublicExtern, f ->
-            [ PUBLIC (opt_label f name); EXTERN (opt_label f name) ]
+            [ PUBLIC (opt_label f name, f); EXTERN (opt_label f name) ]
         | _ -> invalid_arg "must not happen")
       @@ List.filter (function _, `Local, _ -> false | _ -> true) decls
 
@@ -1740,7 +1739,7 @@ let compile cmd ((imports, _), p) =
   in
   let prg =
     List.map (fun i -> IMPORT i) imports
-    @ [ PUBLIC topname ] @ env#get_decls @ List.flatten prg
+    @ [ PUBLIC (topname, true) ] @ env#get_decls @ List.flatten prg
   in
   (*Printf.eprintf "Before propagating closures:\n";
     Printf.eprintf "%s\n%!" env#show_funinfo;

@@ -674,7 +674,7 @@ let compile cmd env imports code =
             | _ -> (env, [])
           else
             match instr with
-            | PUBLIC name -> (env#register_public name, [])
+            | PUBLIC (name, _) -> (env#register_public name, [])
             | EXTERN name -> (env#register_extern name, [])
             | IMPORT _ -> (env, [])
             | CLOSURE (name, closure) ->
