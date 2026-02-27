@@ -90,7 +90,7 @@ type insn =
   | FAIL of Loc.t * bool
   (* external definition                       *)
   | EXTERN of string
-  (* public   definition (name, is a function) *)
+  (* public   definition (name, is_function) *)
   | PUBLIC of string * bool
   (* import clause                             *)
   | IMPORT of string
@@ -192,9 +192,10 @@ module ByteCode = struct
         i
     in
     let add_extern l = externs := S.add l !externs in
-    let add_public name is_global =
-      let flag = if is_global then pub_flag_global else pub_flag_function in
-      pubs := (name, flag) :: !pubs in
+    let add_public name is_fun =
+      let flag = if is_fun then pub_flag_function else pub_flag_global in
+      pubs := (name, flag) :: !pubs 
+    in
     let add_import l = imports := l :: !imports in
     let add_fixup l = fixups := (Buffer.length code, l) :: !fixups in
     let add_func_fixup l = func_fixups := (Buffer.length code, l) :: !func_fixups in
@@ -367,8 +368,8 @@ module ByteCode = struct
       | PATT p -> add_bytes [ (6 * 16) + enum patt p ]
       | EXTERN s -> 
         add_extern s
-      | PUBLIC (s, f) ->
-          add_public s (not f)
+      | PUBLIC (s, is_fun) ->
+          add_public s is_fun
       | IMPORT s -> add_import s
       | _ ->
           failwith
@@ -427,7 +428,7 @@ module ByteCode = struct
       (fun (name_off, offset, flag) ->
         Buffer.add_int32_le file name_off;
         Buffer.add_int32_le file offset;
-        Buffer.add_char file (Char.chr flag))
+        Buffer.add_uint8  file flag)
       pubs_resolved;
     Buffer.add_bytes file code;
     let f = open_out_bin (Printf.sprintf "%s.bc" cmd#basename) in
