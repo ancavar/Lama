@@ -87,7 +87,7 @@ aint vm_run(virtual_machine *vm) {
   memset(stack_data, 0, active_stack_size * sizeof(aint));
 
   __gc_stack_bottom = (size_t)(stack_data + active_stack_size);
-  __gc_stack_top = (size_t)(stack_data - 16);
+  __gc_stack_top = (size_t)stack_data - sizeof(size_t);
 
   // Globals at the top of stack
   aint *globals = stack_data;
