@@ -117,7 +117,10 @@ static bool load_unit_recursive(bytecode_array *units, const char *s,
       continue;
     }
 
-    load_unit_recursive(units, import_name, paths);
+    if (!load_unit_recursive(units, import_name, paths)) {
+      fprintf(stderr, "Error: failed to load import '%s'\n", import_name);
+      return false;
+    }
   }
 
   da_append(*units, bc);
@@ -129,7 +132,14 @@ load_result load(const char *main_unit_path, const search_paths *paths) {
   bytecode_array m;
   da_init(m);
 
-  load_unit_recursive(&m, main_unit_path, paths);
+  if (!load_unit_recursive(&m, main_unit_path, paths)) {
+    for (size_t i = 0; i < m.len; i++) {
+      bytecode_free(m.data[i]);
+    }
+    free(m.data);
+    load_result result = {.units = NULL, .units_len = 0};
+    return result;
+  }
 
   load_result result = {
       .units = m.data,
