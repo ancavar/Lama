@@ -30,6 +30,12 @@ bytecode *bytecode_load(const char *filename) {
 
   size_t file_size = (size_t)st.st_size;
 
+  if (file_size == 0) {
+    fprintf(stderr, "bytecode_load: empty file\n");
+    close(fd);
+    return NULL;
+  }
+
   const uint8_t *data = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
 
   if (data == MAP_FAILED) {
@@ -43,18 +49,41 @@ bytecode *bytecode_load(const char *filename) {
   byte_reader reader;
   reader_init(&reader, data, file_size);
 
+  if (file_size < HEADER_SIZE) {
+    fprintf(stderr, "bytecode_load: file too small for header (%zu bytes)\n",
+            file_size);
+    munmap((void *)data, file_size);
+    return NULL;
+  }
+
   int32_t string_table_size = reader_i32(&reader);
   int32_t globals_count = reader_i32(&reader);
   int32_t num_imports = reader_i32(&reader);
   int32_t num_pubs = reader_i32(&reader);
 
+  if (string_table_size < 0 || globals_count < 0 || num_imports < 0 ||
+      num_pubs < 0) {
+    fprintf(stderr, "bytecode_load: negative header field\n");
+    munmap((void *)data, file_size);
+    return NULL;
+  }
+
   size_t st_offset = HEADER_SIZE;
   size_t imports_offset = st_offset + (size_t)string_table_size;
   size_t pubs_offset = imports_offset + (size_t)num_imports * IMPORT_ENTRY_SIZE;
   size_t code_offset = pubs_offset + (size_t)num_pubs * PUB_ENTRY_SIZE;
+
+  if (code_offset > file_size) {
+    fprintf(stderr,
+            "bytecode_load: sections exceed file size (code_offset=%zu, "
+            "file_size=%zu)\n",
+            code_offset, file_size);
+    munmap((void *)data, file_size);
+    return NULL;
+  }
+
   size_t code_size = file_size - code_offset;
 
-  // TODO: VALIdation
   const char *string_table = (const char *)data + st_offset;
 
   bytecode *bc = ALLOC(bytecode);
