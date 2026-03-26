@@ -92,7 +92,7 @@ aint vm_run(virtual_machine *vm) {
   // Globals at the top of stack
   aint *globals = stack_data;
   for (size_t i = 0; i < vm->total_globals; i++) {
-    globals[i] = 0;
+    globals[i] = BOX(0);
   }
 
   aint *sp = &stack_data[active_stack_size - 1];
