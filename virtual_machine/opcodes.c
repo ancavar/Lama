@@ -104,6 +104,10 @@ const char *opcode_to_string(uint8_t opcode) {
     return "PATT.CLOSURE";
   case OP_BARRAY:
     return "BARRAY";
+  case 0xFF:
+    return "STOP";
+  case 0x00:
+    return "NOP";
   default:
     fprintf(stderr, "Unknown opcode: %d\n", opcode);
     exit(EXIT_FAILURE);
