@@ -112,6 +112,7 @@ bytecode *bytecode_load(const char *filename) {
 void bytecode_pubs_init(bytecode_iterator *iter, const bytecode *bc) {
   reader_init(&iter->reader, bc->pubs, bc->pubs_len * PUB_ENTRY_SIZE);
   iter->string_table = bc->string_table;
+  iter->string_table_size = bc->string_table_size;
   iter->len = bc->pubs_len;
   iter->curr = 0;
 }
@@ -121,6 +122,11 @@ bool bytecode_pubs_next(bytecode_iterator *iter, public_symbol *out) {
     return false;
   }
   int32_t name_offset = reader_i32(&iter->reader);
+  if (name_offset < 0 || (size_t)name_offset >= iter->string_table_size) {
+    fprintf(stderr, "bytecode_pubs_next: name_offset %d out of range\n",
+            name_offset);
+    return false;
+  }
   out->name = iter->string_table + name_offset;
   out->code_offset = reader_i32(&iter->reader);
   out->flag = reader_u8(&iter->reader);
@@ -132,6 +138,7 @@ bool bytecode_pubs_next(bytecode_iterator *iter, public_symbol *out) {
 void bytecode_imports_init(bytecode_iterator *it, const bytecode *bc) {
   reader_init(&it->reader, bc->imports, bc->imports_len * IMPORT_ENTRY_SIZE);
   it->string_table = bc->string_table;
+  it->string_table_size = bc->string_table_size;
   it->len = bc->imports_len;
   it->curr = 0;
 }
@@ -141,6 +148,11 @@ bool bytecode_imports_next(bytecode_iterator *it, const char **out_name) {
     return false;
   }
   int32_t name_offset = reader_i32(&it->reader);
+  if (name_offset < 0 || (size_t)name_offset >= it->string_table_size) {
+    fprintf(stderr, "bytecode_imports_next: name_offset %d out of range\n",
+            name_offset);
+    return false;
+  }
   *out_name = it->string_table + name_offset;
 
   it->curr++;

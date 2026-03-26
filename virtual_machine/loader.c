@@ -112,7 +112,6 @@ static bool load_unit_recursive(bytecode_array *units, const char *s,
   bytecode_iterator iter;
   bytecode_imports_init(&iter, bc);
   while (bytecode_imports_next(&iter, &import_name)) {
-
     // Skip Std since we have it as runtime.a
     if (strcmp(import_name, "Std") == 0) {
       continue;
