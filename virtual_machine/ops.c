@@ -474,7 +474,7 @@ void op_begin(DECL_STATE) {
                 (void *)bp, (void *)sp);
 
   for (int32_t i = 0; i < n_locals; i++) {
-    STACK_PUSH(sp, 0);
+    STACK_PUSH(sp, BOX(0));
   }
 
   DISPATCH();
