@@ -191,7 +191,7 @@ static aint call_variadic(void *fn_ptr, int fixed_args, aint *args,
   ffi_type *arg_types[n_args];
   void *arg_values[n_args];
   aint int_values[n_args];
-  void *result = NULL;
+  aint result = BOX(0);
 
   for (int i = 0; i < n_args; i++) {
     if (UNBOXED(args[i])) {
@@ -212,14 +212,14 @@ static aint call_variadic(void *fn_ptr, int fixed_args, aint *args,
   }
 
   ffi_call(&cif, FFI_FN(fn_ptr), &result, arg_values);
-  return (aint)result;
+  return result;
 }
 
 static aint call_regular(void *fn_ptr, aint *args, int n_args) {
   ffi_cif cif;
   ffi_type *arg_types[n_args];
   void *arg_values[n_args];
-  aint result;
+  aint result = BOX(0);
 
   for (int i = 0; i < n_args; i++) {
     arg_types[i] = &ffi_type_pointer;
