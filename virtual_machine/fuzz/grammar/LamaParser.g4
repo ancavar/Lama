@@ -1,9 +1,40 @@
 parser grammar LamaParser;
 options { tokenVocab = LamaLexer; }
 
-multiUnit : unit (DELIM unit)* EOF ;
+multiUnit
+    : singleUnitProgram EOF
+    | twoUnitProgram EOF
+    | threeUnitProgram EOF
+    ;
 
-unit : importDecl* scopeExpression ;
+singleUnitProgram : standaloneUnit ;
+
+twoUnitProgram
+    : libraryUnit DELIM mainUnitAfterUnit1
+    ;
+
+threeUnitProgram
+    : libraryUnit DELIM libraryUnitAfterUnit1 DELIM mainUnitAfterUnit1And2
+    ;
+
+standaloneUnit : scopeExpression ;
+
+libraryUnit : scopeExpression ;
+
+libraryUnitAfterUnit1 : importUnit1? scopeExpression ;
+
+mainUnitAfterUnit1 : importUnit1? scopeExpression ;
+
+mainUnitAfterUnit1And2 : mainImports12? scopeExpression ;
+
+mainImports12
+    : importUnit1 importUnit2?
+    | importUnit2 importUnit1?
+    ;
+
+importUnit1 : IMPORT UNIT1 SEMI ;
+
+importUnit2 : IMPORT UNIT2 SEMI ;
 
 importDecl : IMPORT UIDENT SEMI ;
 

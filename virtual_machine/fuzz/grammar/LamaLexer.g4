@@ -42,6 +42,8 @@ VAR     : 'var' ;
 WHILE   : 'while' ;
 LET     : 'let' ;
 IN      : 'in' ;
+UNIT1   : 'Unit1' ;
+UNIT2   : 'Unit2' ;
 
 ARROW : '->' ;
 
