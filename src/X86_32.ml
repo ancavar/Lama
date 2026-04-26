@@ -871,6 +871,6 @@ let build cmd prog =
      List.iter (fun o -> Buffer.add_string buf o; Buffer.add_string buf " ") objs;
      let gcc_cmdline = Printf.sprintf "gcc %s -m32 %s %s.s %s %s/runtime.a" cmd#get_debug cmd#get_output_option cmd#basename (Buffer.contents buf) inc in
      Sys.command gcc_cmdline
-  | `Compile ->
+  | `Compile | `Both ->
      Sys.command (Printf.sprintf "gcc %s -m32 -c %s.s" cmd#get_debug cmd#basename)
   | _ -> invalid_arg "must not happen"

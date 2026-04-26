@@ -1535,7 +1535,7 @@ let build cmd prog =
       if result <> 0 then
         failwith
           (Printf.sprintf "Assembly compiler failed with exit code %d" result)
-  | `Compile ->
+  | `Compile | `Both ->
       let cmd =
         Printf.sprintf "%s %s %s -c -g %s.s" compiler compiler_flags debug_flags
           cmd#basename

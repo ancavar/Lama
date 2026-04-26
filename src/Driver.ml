@@ -16,7 +16,15 @@ let[@ocaml.warning "-32"] main =
             match cmd#march with
             | `X86_32 -> ignore @@ X86_32.build cmd prog
             | `AMD64  -> ignore @@ X86_64.build cmd prog)
-        | `BC -> SM.ByteCode.compile cmd (SM.compile cmd prog)
+        | `BC ->
+          cmd#dump_file "i" (Language.Interface.gen prog);
+          SM.ByteCode.compile cmd (SM.compile cmd prog)
+        | `Both ->
+          cmd#dump_file "i" (Language.Interface.gen prog);
+          SM.ByteCode.compile cmd (SM.compile cmd prog);
+          (match cmd#march with
+           | `X86_32 -> ignore @@ X86_32.build cmd prog
+           | `AMD64  -> ignore @@ X86_64.build cmd prog)
         | _ ->
             let rec read acc =
               try

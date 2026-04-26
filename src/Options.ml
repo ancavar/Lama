@@ -40,6 +40,7 @@ class options args =
              into .sm file; has no\n"
     ^ "                      effect if -i option is specfied)\n"
     ^ "  -b              --- compile to a stack machine bytecode\n"
+    ^ "  -bc             --- compile to both bytecode and object file\n"
     ^ "  -64             --- set native compiler target to X86_64 (default)\n"
     ^ "  -32             --- set native compiler target to X86_32\n"
     ^ "  -runtime <path> --- set a path to runtime explicitly\n"
@@ -55,7 +56,7 @@ class options args =
     val runtime_path = generic_runtime_path
     val explicit_runtime_path = ref None
     val paths = ref []
-    val mode = ref (`Default : [ `Default | `Eval | `SM | `Compile | `BC ])
+    val mode = ref (`Default : [ `Default | `Eval | `SM | `Compile | `BC | `Both ])
     val curdir = Unix.getcwd ()
     val debug = ref false
     val target_os = host_os
@@ -93,6 +94,7 @@ class options args =
             | "-32"      -> march := `X86_32
             | "-s"       -> self#set_mode `SM
             | "-b"       -> self#set_mode `BC
+            | "-bc"      -> self#set_mode `Both
             | "-i"       -> self#set_mode `Eval
             | "-ds"      -> self#set_dump dump_sm
             | "-dsrc"    -> self#set_dump dump_source
@@ -190,7 +192,7 @@ class options args =
       Filename.chop_suffix (Filename.basename self#get_infile) ".lama"
 
     method topname =
-      match !mode with `Compile -> labeled_init self#basename | _ -> "main"
+      match !mode with `Compile | `Both -> labeled_init self#basename | _ -> "main"
 
     method dump_file ext contents =
       let name = self#basename in
