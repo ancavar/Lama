@@ -23,7 +23,8 @@ static inline void reader_init(byte_reader *r, const uint8_t *data,
  * Read 32-bit little-endian integer and advance position
  */
 static inline int32_t reader_i32(byte_reader *r) {
-  assert(r->pos + 4 <= r->size);
+  assert(r->pos <= r->size);
+  assert(r->size - r->pos >= 4);
   const uint8_t *p = r->data + r->pos;
   r->pos += 4;
   return (int32_t)((uint32_t)p[0] | ((uint32_t)p[1] << 8) |
@@ -36,9 +37,11 @@ static inline uint8_t reader_u8(byte_reader *r) {
 }
 
 static inline void reader_skip(byte_reader *r, size_t n) {
-  r->pos += n;
-  if (r->pos > r->size) {
+  size_t remaining = r->size - r->pos;
+  if (n >= remaining) {
     r->pos = r->size;
+  } else {
+    r->pos += n;
   }
 }
 
