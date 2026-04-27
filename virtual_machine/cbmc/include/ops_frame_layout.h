@@ -1,0 +1,11 @@
+#ifndef CBMC_OPS_FRAME_LAYOUT_H
+#define CBMC_OPS_FRAME_LAYOUT_H
+
+enum {
+  FRAME_SAVED_BP = -1,
+  FRAME_SAVED_IP = -2,
+  FRAME_SAVED_SP = -3,
+  FRAME_LOCALS = -4,
+};
+
+#endif
