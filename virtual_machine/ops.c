@@ -45,15 +45,21 @@ extern aint Bstring_tag_patt(aint x);
 extern aint Bsexp_tag_patt(aint x);
 extern void Bmatch_failure(aint v, const char *fname, aint line, aint col);
 
+#ifdef __CPROVER__
+#define MUSTTAIL_RETURN(expr) return expr
+#else
+#define MUSTTAIL_RETURN(expr) __attribute__((musttail)) return expr
+#endif
+
 #define DISPATCH()                                                             \
   do {                                                                         \
     ip++;                                                                      \
-    __attribute__((musttail)) return ip->func(STATE);                          \
+    MUSTTAIL_RETURN(ip->func(STATE));                                          \
   } while (0)
 
 #define DISPATCH_JUMP()                                                        \
   do {                                                                         \
-    __attribute__((musttail)) return ip->func(STATE);                          \
+    MUSTTAIL_RETURN(ip->func(STATE));                                          \
   } while (0)
 
 /*
