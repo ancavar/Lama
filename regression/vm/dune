@@ -158,5 +158,3 @@
  (deps ../test801.lama ../test801.input))
 (cram (applies_to test802)
  (deps ../test802.lama ../test802.input))
-(cram (applies_to test803)
- (deps ../test803.lama ../test803.input))

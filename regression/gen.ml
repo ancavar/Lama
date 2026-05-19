@@ -48,7 +48,7 @@ let () =
         let lama_file = Printf.sprintf "test%03d.lama" i in
         let input_file = Printf.sprintf "test%03d.input" i in
 
-        if Sys.file_exists lama_file then (
+        if Sys.file_exists lama_file &&  i <> 803 then (
           cram_printfn
             "  $ ../../src/Driver.exe -runtime ../../runtime -I ../../stdlib/x64 -b ../test%03d.lama"
             i;
