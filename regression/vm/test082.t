@@ -1,7 +1,6 @@
   $ ../../src/Driver.exe -runtime ../../runtime -I ../../stdlib/x64 -b ../test082.lama
   $ ../../virtual_machine/lama.exe test082.bc < ../test082.input
-  > 1
-  > 1
+   > 1
   1
   1
   1
@@ -18,5 +17,3 @@
   3
   2
   1
-  /tmp/dune_cram_ce257f_.cram.sh/main.sh: 2: /tmp/dune_cram_ce257f_.cram.sh/2.sh: 1: not found
-  [127]
