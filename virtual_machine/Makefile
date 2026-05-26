@@ -2,6 +2,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -O3
 LIBS = -lffi -ldl
 LDFLAGS = -rdynamic
+RUNTIME_LINK = -Wl,--whole-archive $(RUNTIME_LIB) -Wl,--no-whole-archive
 BUILD_DIR = .vm-build
 TARGET = lama.exe
 SOURCES = lama.c converter.c vm.c bytecode.c ffi.c loader.c symbols.c ops.c memory.c opcodes.c
@@ -16,7 +17,7 @@ debug: CFLAGS += -DDEBUG_PRINT -g3 -Og -O0 -fsanitize=address
 debug: $(TARGET)
 
 $(TARGET): $(OBJECTS) $(RUNTIME_LIB) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) -Wl,--whole-archive $(RUNTIME_LIB) -Wl,--no-whole-archive $(LIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(RUNTIME_LINK) $(LIBS)
 
 $(RUNTIME_LIB):
 	$(MAKE) -C $(RUNTIME_DIR) LAMA_ENV=0 BUILD_DIR=$(abspath $(BUILD_DIR)/runtime)
