@@ -68,6 +68,7 @@ static const func_metadata func_table[] = {
     {"printf", "Bprintf", false, 1},
     {"fprintf", "Bfprintf", false, 2},
     {"sprintf", "Bsprintf", false, 1},
+    {"failure", "failure", false, 1},
 
     // Sentinel
     {NULL, NULL, false, 0}};
