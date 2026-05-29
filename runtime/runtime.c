@@ -1186,6 +1186,7 @@ extern void Lfclose (FILE *f) {
 extern void *LreadLine () {
   char *buf;
 
+  errno = 0;
   if (scanf("%m[^\n]", &buf) == 1) {
     void *s = Bstring((aint*)&buf);
 

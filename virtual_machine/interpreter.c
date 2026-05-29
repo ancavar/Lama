@@ -22,6 +22,8 @@
 static aint *pending_closure = NULL;
 
 extern void __init(void);
+extern void set_args(aint argc, char *argv[]);
+extern void *global_sysargs;
 
 extern aint Lread(void);
 extern aint Lwrite(aint n);
@@ -234,6 +236,9 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
     case OP_LD: {
       int idx = read_i32(bc->code, ip);
       ip += 4;
+      if (idx == 0) {
+        globals[0] = (aint)global_sysargs;
+      }
       aint val = globals[idx];
       VM_DEBUG("LD global[%d] = %ld\n", idx, val);
       stack_push(stack, val);
@@ -687,7 +692,7 @@ static void run_internal(bytecode *bc, int entry_point, stack_t *stack,
 /**
  * Run merged bytecode with multiple main() entry points.
  */
-void run_merged(merged_bytecode *merged) {
+void run_merged(merged_bytecode *merged, int argc, char *argv[]) {
   if (!merged || !merged->bc) {
     fprintf(stderr, "No merged bytecode to run\n");
     return;
@@ -700,11 +705,15 @@ void run_merged(merged_bytecode *merged) {
 
   // GC initialization
   __init();
+  set_args(argc, argv);
 
   // Globals
   aint *globals = stack.data;
   for (int i = 0; i < merged->bc->globals_count; i++) {
-    stack_push(&stack, 0);
+    globals[i] = BOX(0);
+  }
+  if (merged->bc->globals_count > 0) {
+    globals[0] = (aint)global_sysargs;
   }
 
   aint *sp_after_globals = stack.sp;
@@ -728,14 +737,14 @@ void run_merged(merged_bytecode *merged) {
   }
 }
 
-void run_modules(module_list *modules) {
+void run_modules(module_list *modules, int argc, char *argv[]) {
   merged_bytecode *merged = merge_modules(modules);
   if (!merged) {
     fprintf(stderr, "Failed to merge modules\n");
     return;
   }
 
-  run_merged(merged);
+  run_merged(merged, argc, argv);
 
   free_merged_bytecode(merged);
 }
@@ -752,7 +761,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  run_modules(modules);
+  run_modules(modules, argc - 1, argv + 1);
 
   free_modules(modules);
   return 0;

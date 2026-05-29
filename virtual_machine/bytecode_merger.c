@@ -275,6 +275,13 @@ static int apply_substitutions(module *mod, uint8_t *merged_code,
       final_value = sym->final_value;
       VM_DEBUG("Patched '%s' at %d with %d\n", name, reloc->code_base + offset,
                final_value);
+    } else if (strcmp(name, "global_sysargs") == 0) {
+      final_value = 0;
+      VM_DEBUG("External global '%s' at %d -> global[0]\n", name,
+               reloc->code_base + offset);
+    } else if (strncmp(name, "global_", 7) == 0) {
+      fprintf(stderr, "Error: unresolved global '%s'\n", name);
+      return -1;
     } else {
       // FFI function - add to FFI table and use sentinel
       int ffi_idx = ffi_table_add(ffi, name);

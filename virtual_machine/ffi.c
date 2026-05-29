@@ -35,7 +35,7 @@ static const func_metadata func_table[] = {
     {"Lsprintf", "Bsprintf", false, 1},
 
     // Sentinel
-    {NULL, NULL, false, 0, NULL}};
+    {NULL, NULL, false, 0}};
 
 // TODO: cache?
 static void *lookup_function(const char *name) {
@@ -163,6 +163,12 @@ static aint call_regular_function(const char *name, aint *args, int n_args) {
 }
 
 aint ffi_call_c(const char *name, aint *args, int n_args) {
+  if (strcmp(name, "Lfailure") == 0) {
+    aint message = call_variadic_function("Bsprintf", 1, args, n_args);
+    fprintf(stderr, "*** FAILURE: %s", (char *)message);
+    exit(255);
+  }
+
   const func_metadata *meta = lookup_metadata(name);
 
   if (meta) {
