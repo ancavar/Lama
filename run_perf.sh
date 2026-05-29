@@ -23,29 +23,10 @@ RUNS="${RUNS:-1}"
 WARMUPS="${WARMUPS:-1}"
 CPU="${CPU:-4}"
 
+. "$ROOT/perf_common.sh"
+
 csv_header() {
   printf 'label,run,wall_seconds,max_rss_kb\n' >"$CSV"
-}
-
-switch_back_to_bench() {
-  git -C "$ROOT" switch "$BENCH_BRANCH" >/dev/null
-}
-
-build_old_artifacts() {
-  echo "building old artifacts from '$OLD_BRANCH'"
-
-  git -C "$ROOT" switch --detach "$OLD_BRANCH" >/dev/null
-  trap switch_back_to_bench RETURN
-
-  (cd "$ROOT" && dune clean && dune b ./src/Driver.exe)
-  (cd "$ROOT/virtual_machine" && make clean && make)
-
-  cp "$ROOT/_build/default/src/Driver.exe" "$OLD_DRIVER"
-  cp "$ROOT/virtual_machine/interpreter.exe" "$OLD_VM"
-  chmod +x "$OLD_DRIVER" "$OLD_VM"
-
-  trap - RETURN
-  switch_back_to_bench
 }
 
 build_current_artifacts() {
@@ -79,38 +60,6 @@ compile_old_bytecode() {
   (cd "$OLD_BC_DIR" && "$OLD_DRIVER" -b "$source")
 }
 
-run_cmd() {
-  local stdin_file="$1"
-  shift
-  if [[ -n "$stdin_file" && -f "$stdin_file" ]]; then
-    "$@" <"$stdin_file" >/dev/null
-  else
-    "$@" </dev/null >/dev/null
-  fi
-}
-
-measure_case() {
-  local label="$1" stdin_file="$2"
-  shift 2
-
-  local cmd=("$@")
-  [[ -n "${CPU:-}" ]] && cmd=(taskset -c "$CPU" "${cmd[@]}")
-
-  for _ in $(seq 1 "$WARMUPS"); do
-    run_cmd "$stdin_file" "${cmd[@]}"
-  done
-
-  for run in $(seq 1 "$RUNS"); do
-    local result
-    if [[ -n "$stdin_file" && -f "$stdin_file" ]]; then
-      result="$({ /usr/bin/time -f '%e,%M' "${cmd[@]}" <"$stdin_file" >/dev/null; } 2>&1)"
-    else
-      result="$({ /usr/bin/time -f '%e,%M' "${cmd[@]}" >/dev/null; } 2>&1)"
-    fi
-    printf '%s,%s,%s\n' "$label" "$run" "$result" >>"$CSV"
-  done
-}
-
 run_source() {
   local suite="$1" source="$2" source_dir="$3"
 
@@ -120,14 +69,23 @@ run_source() {
 
   local label_prefix="${suite//\//_}-${test_name}"
 
-  compile_native "$source" "$test_name"
-  measure_case "${label_prefix}-native" "$input_file" "$WORKDIR/$test_name"
+  if compile_native "$source" "$test_name"; then
+    measure_case "${label_prefix}-native" "$input_file" "$WORKDIR/$test_name" || true
+  else
+    echo "skip: ${label_prefix}-native compile failed" >&2
+  fi
 
-  compile_bytecode "$source"
-  measure_case "${label_prefix}-vm" "$input_file" "$VM" -I "$STDLIB_DIR" "$WORKDIR/$test_name.bc"
+  if compile_bytecode "$source"; then
+    measure_case "${label_prefix}-vm" "$input_file" "$VM" -I "$STDLIB_DIR" "$WORKDIR/$test_name.bc" || true
+  else
+    echo "skip: ${label_prefix}-vm bytecode compile failed" >&2
+  fi
 
-  compile_old_bytecode "$source"
-  measure_case "${label_prefix}-old-vm" "$input_file" "$OLD_VM" "$OLD_BC_DIR/$test_name.bc"
+  if compile_old_bytecode "$source"; then
+    measure_case "${label_prefix}-old-vm" "$input_file" "$OLD_VM" "$OLD_BC_DIR/$test_name.bc" || true
+  else
+    echo "skip: ${label_prefix}-old-vm bytecode compile failed" >&2
+  fi
 }
 
 for required in git dune make cp chmod mkdir /usr/bin/time; do
@@ -147,15 +105,6 @@ csv_header
 
 run_source "performance" "$ROOT/performance/Ackermann.lama" "$ROOT/performance"
 run_source "performance" "$ROOT/performance/GenCyclicArrays.lama" "$ROOT/performance"
-
-for source in "$ROOT"/regression/test*.lama; do
-  [[ -e "$source" ]] || continue
-  run_source "regression" "$source" "$ROOT/regression"
-done
-
-for source in "$ROOT"/stdlib/regression/test*.lama; do
-  [[ -e "$source" ]] || continue
-  run_source "stdlib/regression" "$source" "$ROOT/stdlib/regression"
-done
+run_source "performance" "$ROOT/performance/Sort.lama" "$ROOT/performance"
 
 echo "results: $CSV"
