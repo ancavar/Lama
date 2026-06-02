@@ -41,7 +41,7 @@ compile_old_stdlib() {
   local module
   for module in "$ROOT"/stdlib/*.lama; do
     [[ -e "$module" ]] || continue
-    (cd "$OLD_BC_DIR" && "$OLD_DRIVER" -b "$module")
+    (cd "$OLD_BC_DIR" && "$OLD_DRIVER" -runtime "$RUNTIME_DIR" -I "$STDLIB_DIR" -b "$module")
   done
 }
 
@@ -57,7 +57,7 @@ compile_bytecode() {
 
 compile_old_bytecode() {
   local source="$1"
-  (cd "$OLD_BC_DIR" && "$OLD_DRIVER" -b "$source")
+  (cd "$OLD_BC_DIR" && "$OLD_DRIVER" -runtime "$RUNTIME_DIR" -I "$STDLIB_DIR" -b "$source")
 }
 
 run_source() {
